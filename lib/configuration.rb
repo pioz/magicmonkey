@@ -10,7 +10,7 @@ class Conf
   end
 
   def load
-    @file = "/Users/pioz/Desktop/magicmonkey.yml"
+    @file = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
     if File.exist?(@file)
       @config = YAML.load_file(@file)
     else

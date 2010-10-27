@@ -1,116 +1,118 @@
 require 'optparse'
 require 'pp'
+require 'etc'
 require "#{$APP_PATH}/lib/configuration"
 
 module MagicMonkey
-	COMMANDS = [:start, :stop, :restart, :add, :remove, :show]
+  COMMANDS = [:start, :stop, :restart, :add, :remove, :show]
 
-	def self.main(argv)
-	  #raise 'Must run as root' unless Process.uid == 0
-		command = argv[0]
-		if command.nil? || command == '-h' || command == '--help' || !COMMANDS.include?(command.to_sym)
-			main_help
-			exit
-		elsif command == '-v' || command == '--version'
-			puts File.exist?("#{$APP_PATH}/VERSION") ? File.read("#{$APP_PATH}/VERSION").strip : ''
-			exit
-		else
-			send(command, argv[1..-1])
-		end
-	end
-
-	def self.main_help
-		puts 'Desj'
-		puts
-		puts 'Available commands:'
-		puts
-		COMMANDS.each do |c|
-			puts "  magicmonkey #{c}\t\tdesc"
-		end
-		puts
-		puts "Special options:"
-		puts
-		puts "  magicmonkey --help\t\tDisplay this help message."
-		puts "  magicmonkey --version\t\tDisplay version number."
-		puts
-		puts "For more information about a specific command, please type"
-		puts "'magicmonkey <COMMAND> --help', e.g. 'magicmonkey add --help'."
-	end
-	
-	def self.show(argv)
-	  applications = argv
-		applications = Conf.applications.keys if argv.empty?
-		applications.each do |app_name|
-		  puts app_name
-		  puts '-'*app_name.to_s.size
-	    pp Conf[app_name]
-	    puts
+  def self.main(argv)
+    #raise 'Must run as root' unless Process.uid == 0
+    command = argv[0]
+    if command.nil? || command == '-h' || command == '--help' || !COMMANDS.include?(command.to_sym)
+      main_help
+      exit
+    elsif command == '-v' || command == '--version'
+      puts File.exist?("#{$APP_PATH}/VERSION") ? File.read("#{$APP_PATH}/VERSION").strip : ''
+      exit
+    else
+      send(command, argv[1..-1])
     end
   end
-	
-	def self.start(argv)
-		applications = argv
-		applications = Conf.applications.keys if argv.empty?
-		applications.each do |app_name|
-		  if Conf[app_name]
-		    commands = []
-		    commands << "source '/Users/pioz/.rvm/scripts/rvm'"
-		    commands << "cd '#{Conf[app_name][:app_path]}'"
-		    commands << "rvm use '#{Conf[app_name][:ruby]}'"
-		    case Conf[app_name][:app_server]
-	      when 'passenger'
-	        commands << "passenger start -e production -p #{Conf[app_name][:port]} -d"
+
+  def self.main_help
+    puts 'Desj'
+    puts
+    puts 'Available commands:'
+    puts
+    COMMANDS.each do |c|
+      puts "  magicmonkey #{c}\t\tdesc"
+    end
+    puts
+    puts "Special options:"
+    puts
+    puts "  magicmonkey --help\t\tDisplay this help message."
+    puts "  magicmonkey --version\t\tDisplay version number."
+    puts
+    puts "For more information about a specific command, please type"
+    puts "'magicmonkey <COMMAND> --help', e.g. 'magicmonkey add --help'."
+  end
+  
+  def self.show(argv)
+    applications = argv
+    applications = Conf.applications.keys if argv.empty?
+    applications.each do |app_name|
+      puts app_name
+      puts '-'*app_name.to_s.size
+      pp Conf[app_name]
+      puts
+    end
+  end
+  
+  def self.start(argv)
+    applications = argv
+    applications = Conf.applications.keys if argv.empty?
+    applications.each do |app_name|
+      if Conf[app_name]
+        commands = []
+        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
+        commands << "cd '#{Conf[app_name][:app_path]}'"
+        commands << "rvm use '#{Conf[app_name][:ruby]}'"
+        case Conf[app_name][:app_server]
+        when 'passenger'
+          commands << "passenger start -e production -p #{Conf[app_name][:port]} -d"
         when 'thin'
           commands << "thin start -e production -p #{Conf[app_name][:port]} -d"
         end
         print `#{commands.join(' && ')}`
-	    end
-	  end
-	end
-	
-	def self.stop(argv)
-		applications = argv
-		applications = Conf.applications.keys if argv.empty?
-		applications.each do |app_name|
-		  if Conf[app_name]
-		    commands = []
-		    commands << "cd '#{Conf[app_name][:app_path]}'"
-		    case Conf[app_name][:app_server]
-	      when 'passenger'
-	        commands << "passenger stop -p #{Conf[app_name][:port]}"
+      end
+    end
+  end
+  
+  def self.stop(argv)
+    applications = argv
+    applications = Conf.applications.keys if argv.empty?
+    applications.each do |app_name|
+      if Conf[app_name]
+        commands = []
+        commands << "cd '#{Conf[app_name][:app_path]}'"
+        case Conf[app_name][:app_server]
+        when 'passenger'
+          commands << "passenger stop -p #{Conf[app_name][:port]}"
         when 'thin'
           commands << "thin stop -p #{Conf[app_name][:port]}"
         end
         print `#{commands.join(' && ')}`
-	    end
-	  end
-	end
-	
-	def self.restart(argv)
-	  applications = argv
-		applications = Conf.applications.keys if argv.empty?
-		applications.each do |app_name|
-		  self.stop([app_name])
-		  self.start([app_name])
-	  end
+      end
+    end
   end
-	
-	def self.add(argv)
-	  servers = ['passenger', 'thin']
-	  ports   = (3000..4000).to_a.collect{|p| p.to_s}
-	  rubies  = ['default', '1.9.2', '1.8.7', 'ree']
-	  options = {}
-	  options[:app_server]     = servers.first
-	  options[:app_path]       = '/var/sites/APP_NAME/current'
-	  options[:vhost_path]     = '/etc/apache2/site-avaiable'
-	  options[:vhost_template] = '/etc/magicmonkey.yml'
-	  options[:port]           = nil
-	  options[:ruby]           = rubies.first
-	  force                    = false
-	  enable_site              = true
-	  
-	  
-	  parser = OptionParser.new do |opts|
+  
+  def self.restart(argv)
+    applications = argv
+    applications = Conf.applications.keys if argv.empty?
+    applications.each do |app_name|
+      self.stop([app_name])
+      self.start([app_name])
+    end
+  end
+  
+  def self.add(argv)
+    servers = ['passenger', 'thin']
+    ports   = (3000..4000).to_a.collect{|p| p.to_s}
+    rubies  = ['default', '1.9.2', '1.8.7', 'ree']
+    options = {}
+    options[:app_server]     = servers.first
+    options[:app_path]       = '/var/sites/APP_NAME/current'
+    options[:vhost_path]     = '/etc/apache2/site-avaiable'
+    options[:vhost_template] = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
+    options[:port]           = nil
+    options[:ruby]           = rubies.first
+    force                    = false
+    enable_site              = true
+    create_vhost             = true
+    
+    
+    parser = OptionParser.new do |opts|
       opts.banner = 'Usage: magicmonkey add APP_NAME [options]'
       opts.separator ''
       opts.separator 'Options:'
@@ -142,6 +144,10 @@ module MagicMonkey
     
       opts.on('-f', '--[no-]force', "Force mode: replace exist files.") do |f|
         force = f
+      end
+      
+      opts.on('--[no-]create-vhost', "Create virtual host file from template (default true).") do |c|
+        create_vhost = c
       end
       
       opts.on('--[no-]enable-site', "Enable Apache virtual host (default true).") do |e|
