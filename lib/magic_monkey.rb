@@ -109,7 +109,7 @@ module MagicMonkey
     options[:app_path]   = '/var/sites/APP_NAME/current'
     options[:port]       = nil
     options[:ruby]       = rubies.first
-    options[:vhost_path] = '/etc/apache2/sites-avaiable'
+    options[:vhost_path] = '/etc/apache2/sites-available'
     vhost_template       = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
     force                = false
     create_vhost         = true
@@ -209,7 +209,7 @@ module MagicMonkey
           vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
           if !File.exist?(vh_file) || force
             #File.open(vh_file, 'w') { |f| f.write(vh) }
-            print `sudo echo '#{vh}' > #{vh_file}`
+            print `sudo sh -c "echo '#{vh}' > #{vh_file}"`
           else
             puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
             exit
