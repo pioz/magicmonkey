@@ -4,12 +4,12 @@ require 'rake'
 begin
   require 'jeweler'
   Jeweler::Tasks.new do |gem|
-    gem.name = "magic_monkey"
+    gem.name = "magicmonkey"
 		gem.version = File.exist?('VERSION') ? File.read('VERSION').strip : ''
-    gem.summary = %Q{TODO: one-line summary of your gem}
-    gem.description = %Q{TODO: longer description of your gem}
+    gem.summary = %Q{Manage your Rails applications: different Ruby versions and different application servers}
+    gem.description = %Q{Manage your Rails applications: different Ruby versions and different application servers}
     gem.email = "enrico@megiston.it"
-    gem.homepage = "http://github.com/pioz/magic_monkey"
+    gem.homepage = "http://github.com/pioz/magicmonkey"
     gem.authors = ["pioz"]
     gem.add_development_dependency "thoughtbot-shoulda", ">= 0"
 		#gem.add_dependency 'nokogiri'
@@ -50,7 +50,7 @@ Rake::RDocTask.new do |rdoc|
   version = File.exist?('VERSION') ? File.read('VERSION') : ""
 
   rdoc.rdoc_dir = 'rdoc'
-  rdoc.title = "magic_monkey #{version}"
+  rdoc.title = "magicmonkey #{version}"
   rdoc.rdoc_files.include('README*')
   rdoc.rdoc_files.include('lib/**/*.rb')
 end
