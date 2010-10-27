@@ -40,14 +40,15 @@ module MagicMonkey
   
   def self.show(argv)
     applications = argv
-    all_applications = Conf.applications.keys
-    applications = all_applications if argv.empty?
+    applications = Conf.applications.keys if argv.empty?
     applications.each do |app_name|
-      if all_applications.include?(app_name.to_sym)
+      if Conf[app_name]
         puts app_name
         puts '-'*app_name.to_s.size
         pp Conf[app_name]
         puts
+      else
+        puts "Application '#{app_name}' not found."
       end
     end
   end
@@ -104,16 +105,17 @@ module MagicMonkey
     ports   = (3000..4000).to_a.collect{|p| p.to_s}
     rubies  = ['default', '1.9.2', '1.8.7', 'ree']
     options = {}
-    options[:app_server]     = servers.first
-    options[:app_path]       = '/var/sites/APP_NAME/current'
-    options[:vhost_path]     = '/etc/apache2/site-avaiable'
-    options[:vhost_template] = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
-    options[:port]           = nil
-    options[:ruby]           = rubies.first
-    force                    = false
-    enable_site              = true
-    create_vhost             = true
-    server_name              = nil
+    options[:app_server] = servers.first
+    options[:app_path]   = '/var/sites/APP_NAME/current'
+    options[:port]       = nil
+    options[:ruby]       = rubies.first
+    options[:vhost_path] = '/etc/apache2/site-avaiable'
+    vhost_template       = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
+    force                = false
+    create_vhost         = true
+    enable_site          = true
+    reload_apache        = false
+    server_name          = nil
     
     
     parser = OptionParser.new do |opts|
@@ -131,11 +133,11 @@ module MagicMonkey
       end
       
       opts.on('--vhost-path VHOST_PATH', "Use the given virtual host path (default '#{options[:vhost_path]}').") do |path|
-        options[:vhost_path] = path
+        vhost_path = path
       end
       
       opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file.") do |template|
-        options[:vhost_template] = template
+        vhost_template = template
       end
       
       opts.on('-p', '--port NUMBER', ports, "Use the given port number (min: #{ports.first}, max: #{ports.last}).") do |p|
@@ -156,6 +158,10 @@ module MagicMonkey
       
       opts.on('--[no-]enable-site', "Enable Apache virtual host (default true).") do |e|
         enable_site = e
+      end
+      
+      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default false).") do |r|
+        reload_apache = r
       end
       
       opts.on('--server-name SERVER_NAME', "Set ServerName on virtual host.") do |name|
@@ -196,23 +202,20 @@ module MagicMonkey
       input = STDIN.gets
       if input.upcase == "Y\n" || input == "\n"
         if create_vhost
-          if Process.uid == 0
-            vh = YAML.load_file(Conf[app_name][:vhost_template])[:vhost_template]
-            vh.gsub!('$SERVER_NAME', server_name || app_name)
-            vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
-            vh.gsub!('$PORT', Conf[app_name][:port].to_s)
-            vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
-            if !File.exist?(vh_file) || force
-              File.open(vh_file, 'w') { |f| f.write(vh) }
-            else
-              puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
-              exit
-            end
-            print `a2ensite '#{vh_file}'` if enable_site
+          vh = YAML.load_file(vhost_template)[:vhost_template]
+          vh.gsub!('$SERVER_NAME', server_name || app_name)
+          vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
+          vh.gsub!('$PORT', Conf[app_name][:port].to_s)
+          vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
+          if !File.exist?(vh_file) || force
+            #File.open(vh_file, 'w') { |f| f.write(vh) }
+            print `sudo echo '#{vh}' > #{vh_file}`
           else
-            puts 'You must be root to add a new virtual host.'
+            puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
             exit
           end
+          print `sudo a2ensite '#{vh_file}'` if enable_site
+          print `sudo /etc/init.d/apache2 reload` if enable_site && reload_apache
         end
         Conf.save
         puts "Application added."
@@ -229,8 +232,8 @@ module MagicMonkey
       if Conf[app_name]
         vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
         if File.exist?(vh_file)
-          print `a2dissite '#{vh_file}'`
-          File.delete(vh_file)
+          print `sudo a2dissite '#{vh_file}'`
+          print `sudo rm -f #{vh_file}`
           Conf.delete(app_name)
           Conf.save
         end
