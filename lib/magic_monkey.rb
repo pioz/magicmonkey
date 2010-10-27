@@ -139,7 +139,7 @@ module MagicMonkey
         options[:vhost_path] = path
       end
       
-      opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file.") do |template|
+      opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file (default #{vhost_template}).") do |template|
         vhost_template = template
       end
       
@@ -151,23 +151,23 @@ module MagicMonkey
         options[:ruby] = r
       end
     
-      opts.on('-f', '--[no-]force', "Force mode: replace exist files.") do |f|
+      opts.on('-f', '--[no-]force', "Force mode: replace exist files (default #{force}).") do |f|
         force = f
       end
       
-      opts.on('--[no-]create-vhost', "Create virtual host file from template (default true).") do |c|
+      opts.on('--[no-]create-vhost', "Create virtual host file from template (default #{create_vhost}).") do |c|
         create_vhost = c
       end
       
-      opts.on('--[no-]enable-site', "Enable Apache virtual host (default true).") do |e|
+      opts.on('--[no-]enable-site', "Enable Apache virtual host (default #{enable_site}).") do |e|
         enable_site = e
       end
       
-      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default false).") do |r|
+      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default #{reload_apache}).") do |r|
         reload_apache = r
       end
       
-      opts.on('--server-name SERVER_NAME', "Set ServerName on virtual host.") do |name|
+      opts.on('--server-name SERVER_NAME', "Set ServerName on virtual host (default APP_NAME).") do |name|
         server_name = name
       end
     
