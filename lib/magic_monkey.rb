@@ -109,7 +109,7 @@ module MagicMonkey
     options[:app_path]   = '/var/sites/APP_NAME/current'
     options[:port]       = nil
     options[:ruby]       = rubies.first
-    options[:vhost_path] = '/etc/apache2/site-avaiable'
+    options[:vhost_path] = '/etc/apache2/sites-avaiable'
     vhost_template       = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
     force                = false
     create_vhost         = true
@@ -133,7 +133,7 @@ module MagicMonkey
       end
       
       opts.on('--vhost-path VHOST_PATH', "Use the given virtual host path (default '#{options[:vhost_path]}').") do |path|
-        vhost_path = path
+        options[:vhost_path] = path
       end
       
       opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file.") do |template|
@@ -234,9 +234,9 @@ module MagicMonkey
         if File.exist?(vh_file)
           print `sudo a2dissite '#{vh_file}'`
           print `sudo rm -f #{vh_file}`
-          Conf.delete(app_name)
-          Conf.save
         end
+        Conf.delete(app_name)
+        Conf.save
       end
     end
   end
