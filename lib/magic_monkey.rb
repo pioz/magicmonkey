@@ -227,8 +227,8 @@ module MagicMonkey
   
   def self.get_port(port)
     ports = Conf.ports
+    return false if ports.nil? || ports.include?(port)
     return ports.max + 1 if port.nil?
-    return false if ports.include?(port)
     return port
   end
 
