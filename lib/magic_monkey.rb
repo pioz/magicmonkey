@@ -158,7 +158,7 @@ module MagicMonkey
         enable_site = e
       end
       
-      opts.on('--server-name', "Set ServerName on virtual host.") do |name|
+      opts.on('--server-name SERVER_NAME', "Set ServerName on virtual host.") do |name|
         server_name = name
       end
     
