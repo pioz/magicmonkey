@@ -40,12 +40,15 @@ module MagicMonkey
   
   def self.show(argv)
     applications = argv
-    applications = Conf.applications.keys if argv.empty?
+    all_applications = Conf.applications.keys
+    applications = all_applications if argv.empty?
     applications.each do |app_name|
-      puts app_name
-      puts '-'*app_name.to_s.size
-      pp Conf[app_name]
-      puts
+      if all_applications.include?(app_name.to_sym)
+        puts app_name
+        puts '-'*app_name.to_s.size
+        pp Conf[app_name]
+        puts
+      end
     end
   end
   
@@ -110,6 +113,7 @@ module MagicMonkey
     force                    = false
     enable_site              = true
     create_vhost             = true
+    server_name              = nil
     
     
     parser = OptionParser.new do |opts|
@@ -153,6 +157,10 @@ module MagicMonkey
       opts.on('--[no-]enable-site', "Enable Apache virtual host (default true).") do |e|
         enable_site = e
       end
+      
+      opts.on('--server-name', "Set ServerName on virtual host.") do |name|
+        server_name = name
+      end
     
       opts.on_tail('-h', '--help', 'Show this help message.') do
         puts opts
@@ -187,18 +195,25 @@ module MagicMonkey
       print "Add this application? [Y/n]"
       input = STDIN.gets
       if input.upcase == "Y\n" || input == "\n"
-        vh = YAML.load_file(Conf[app_name][:vhost_template])[:vhost_template]
-        vh.gsub!('$SERVER_NAME', app_name)
-        vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
-        vh.gsub!('$PORT', Conf[app_name][:port].to_s)
-        vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
-        if !File.exist?(vh_file) || force
-          File.open(vh_file, 'w') { |f| f.write(vh) }
-        else
-          puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
-          exit
+        if create_vhost
+          if Process.uid == 0
+            vh = YAML.load_file(Conf[app_name][:vhost_template])[:vhost_template]
+            vh.gsub!('$SERVER_NAME', server_name || app_name)
+            vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
+            vh.gsub!('$PORT', Conf[app_name][:port].to_s)
+            vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
+            if !File.exist?(vh_file) || force
+              File.open(vh_file, 'w') { |f| f.write(vh) }
+            else
+              puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
+              exit
+            end
+            print `a2ensite '#{vh_file}'` if enable_site
+          else
+            puts 'You must be root to add a new virtual host.'
+            exit
+          end
         end
-        print `a2ensite '#{vh_file}'` if enable_site
         Conf.save
         puts "Application added."
       else
@@ -227,7 +242,8 @@ module MagicMonkey
   
   def self.get_port(port)
     ports = Conf.ports
-    return false if ports.nil? || ports.include?(port)
+    return 3000 if ports.nil? || ports.empty?
+    return false if ports.include?(port)
     return ports.max + 1 if port.nil?
     return port
   end
