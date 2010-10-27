@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+
+$APP_PATH = "#{File.dirname(__FILE__)}/.."
+require "#{$APP_PATH}/lib/magic_monkey.rb"
+
+MagicMonkey.main(ARGV)
