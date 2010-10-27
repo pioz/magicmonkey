@@ -17,7 +17,6 @@ class Conf
       vht = ""
       vht << "<VirtualHost tagi:80>\n"
       vht << "  ServerName $SERVER_NAME\n"
-      vht << "  DocumentRoot $DOCUMENT_ROOT\n"
       vht << "  PassengerEnabled off\n"
       vht << "  ProxyPass / http://127.0.0.1:$PORT\n"
       vht << "  ProxyPassReverse / http://127.0.0.1:$PORT\n"
@@ -51,7 +50,7 @@ class Conf
   def self.applications
     app = {}
     Conf.instance.config.each do |k, v|
-      if k != :vhost_template
+      if k != :vhost_template && k != :uid
         app[k] = v
       end
     end

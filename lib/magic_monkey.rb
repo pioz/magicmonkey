@@ -7,13 +7,14 @@ module MagicMonkey
   COMMANDS = [:start, :stop, :restart, :add, :remove, :show]
 
   def self.main(argv)
-    #raise 'Must run as root' unless Process.uid == 0
+    raise 'You cannot do this as root' if Process.uid == 0
+    Process::UID.change_privilege(Conf[:uid] || Process.uid)
     command = argv[0]
-    if command.nil? || command == '-h' || command == '--help' || !COMMANDS.include?(command.to_sym)
-      main_help
-      exit
-    elsif command == '-v' || command == '--version'
+    if command == '-v' || command == '--version'
       puts File.exist?("#{$APP_PATH}/VERSION") ? File.read("#{$APP_PATH}/VERSION").strip : ''
+      exit
+    elsif command.nil? || command == '-h' || command == '--help' || !COMMANDS.include?(command.to_sym)
+      main_help
       exit
     else
       send(command, argv[1..-1])
@@ -21,7 +22,7 @@ module MagicMonkey
   end
 
   def self.main_help
-    puts 'Desj'
+    puts 'Description here'
     puts
     puts 'Available commands:'
     puts
@@ -61,14 +62,14 @@ module MagicMonkey
         commands = []
         commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
         commands << "cd '#{Conf[app_name][:app_path]}'"
-        commands << "rvm use '#{Conf[app_name][:ruby]}'"
+        commands << "rvm '#{Conf[app_name][:ruby]}'"
         case Conf[app_name][:app_server]
         when 'passenger'
           commands << "passenger start -e production -p #{Conf[app_name][:port]} -d"
         when 'thin'
           commands << "thin start -e production -p #{Conf[app_name][:port]} -d"
         end
-        print `#{commands.join(' && ')}`
+        print `bash -c "#{commands.join(' && ')}"`
       end
     end
   end
@@ -79,14 +80,16 @@ module MagicMonkey
     applications.each do |app_name|
       if Conf[app_name]
         commands = []
+        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
         commands << "cd '#{Conf[app_name][:app_path]}'"
+        commands << "rvm '#{Conf[app_name][:ruby]}'"
         case Conf[app_name][:app_server]
         when 'passenger'
           commands << "passenger stop -p #{Conf[app_name][:port]}"
         when 'thin'
           commands << "thin stop -p #{Conf[app_name][:port]}"
         end
-        print `#{commands.join(' && ')}`
+        print `bash -c "#{commands.join(' && ')}"`
       end
     end
   end
@@ -204,17 +207,17 @@ module MagicMonkey
         if create_vhost
           vh = YAML.load_file(vhost_template)[:vhost_template]
           vh.gsub!('$SERVER_NAME', server_name || app_name)
-          vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
+          #vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
           vh.gsub!('$PORT', Conf[app_name][:port].to_s)
           vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
           if !File.exist?(vh_file) || force
             #File.open(vh_file, 'w') { |f| f.write(vh) }
-            print `sudo sh -c "echo '#{vh}' > #{vh_file}"`
+            print `sudo bash -c "echo '#{vh}' > #{vh_file}"`
           else
             puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
             exit
           end
-          print `sudo a2ensite '#{vh_file}'` if enable_site
+          print `sudo a2ensite '#{app_name}'` if enable_site
           print `sudo /etc/init.d/apache2 reload` if enable_site && reload_apache
         end
         Conf.save
@@ -232,7 +235,7 @@ module MagicMonkey
       if Conf[app_name]
         vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
         if File.exist?(vh_file)
-          print `sudo a2dissite '#{vh_file}'`
+          print `sudo a2dissite '#{app_name}'`
           print `sudo rm -f #{vh_file}`
         end
         Conf.delete(app_name)
