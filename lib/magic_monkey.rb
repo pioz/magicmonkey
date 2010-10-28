@@ -70,7 +70,7 @@ module MagicMonkey
         commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'"
         case Conf[app_name][:app_server]
         when 'passenger'
-          commands << "passenger start -e production -p #{Conf[app_name][:port]} -d"
+          commands << "passenger start -e production -p #{Conf[app_name][:port]} #{Conf[app_name][:app_server_options]} -d"
         when 'thin'
           commands << "thin start -e production -p #{Conf[app_name][:port]} -d"
         end
@@ -122,83 +122,63 @@ module MagicMonkey
   end
   
   def self.add(argv)
+    options = {}
+    tmp = argv.join('$$').split(/\$\$--\$\$/)
+    argv = tmp[0].split('$$')
+    options[:app_server_options] = tmp[1] ? tmp[1].split('$$').join(' ') : ''
     servers = ['passenger', 'thin']
     ports   = (3000..4000).to_a.collect{|p| p.to_s}
     rubies  = ['default', '1.9.2', '1.8.7', 'ree']
-    options = {}
-    options[:app_server]     = servers.first
-    options[:max_poll_size]  = 2
-		options[:min_instances]  = 1
-    options[:app_path]       = '/var/sites/APP_NAME/current'
-    options[:port]           = nil
-    options[:ruby]           = rubies.first
-    options[:vhost_path]     = '/etc/apache2/sites-available'
-    vhost_template           = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
-    force                    = false
-    create_vhost             = true
-    enable_site              = true
-    reload_apache            = false
-    server_name              = nil
-    
-    
+    options[:app_server] = servers.first
+    options[:app_path]   = '/var/sites/APP_NAME/current'
+    options[:port]       = nil
+    options[:ruby]       = rubies.first
+    options[:vhost_path] = '/etc/apache2/sites-available'
+    vhost_template       = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
+    force                = false
+    create_vhost         = true
+    enable_site          = true
+    reload_apache        = false
+    server_name          = nil
+        
     parser = OptionParser.new do |opts|
-      opts.banner = 'Usage: magicmonkey add APP_NAME [options]'
+      opts.banner = 'Usage: magicmonkey add APP_NAME [options] [-- application_server_options]'
       opts.separator ''
       opts.separator 'Options:'
-
 
       opts.on('-s', '--app-server APP_SERVER', servers, "Use the given application server: #{servers.join(', ')} (default: #{options[:app_server]}).") do |s|
         options[:app_server] = s
       end
-
-			opts.on('--max-poll-size NUMBER', Integer, "Maximum number of application processes (default: #{options[:max_poll_size]}).") do |m|
-        options[:max_poll_size] = m
-      end
-
-			opts.on('--min-instances NUMBER', Integer, "Minimum number of processes per application (default: #{options[:min_instances]}).") do |m|
-        options[:min_instances] = m
-      end
-      
       opts.on('--app-path APP_PATH', "Use the given application path (default: '#{options[:app_path]}').") do |path|
         options[:app_path] = path
       end
-      
       opts.on('--vhost-path VHOST_PATH', "Use the given virtual host path (default: '#{options[:vhost_path]}').") do |path|
         options[:vhost_path] = path
       end
-      
       opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file (default: #{vhost_template}).") do |template|
         vhost_template = template
       end
-      
       opts.on('-p', '--port NUMBER', ports, "Use the given port number (min: #{ports.first}, max: #{ports.last}).") do |p|
         options[:port] = p.to_i
       end
-    
       opts.on('-r', '--ruby RUBY_VERSION', rubies, "Use the given Ruby version: #{rubies.join(', ')} (default: #{options[:ruby]}).") do |r|
         options[:ruby] = r
       end
-    
       opts.on('-f', '--[no-]force', "Force mode: replace exist files (default: #{force}).") do |f|
         force = f
       end
-      
       opts.on('--[no-]create-vhost', "Create virtual host file from template (default: #{create_vhost}).") do |c|
         create_vhost = c
       end
-      
       opts.on('--[no-]enable-site', "Enable Apache virtual host (default: #{enable_site}).") do |e|
         enable_site = e
       end
-      
       opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default: #{reload_apache}).") do |r|
         reload_apache = r
       end
-      
       opts.on('--server-name SERVER_NAME', "Set ServerName on virtual host (default: APP_NAME).") do |name|
         server_name = name
       end
-    
       opts.on_tail('-h', '--help', 'Show this help message.') do
         puts opts
         exit
@@ -254,7 +234,7 @@ module MagicMonkey
         puts 'Application rejected.'
       end
     else
-      puts "This application already added. You can remove it with 'remove' command."
+      puts "Application '#{app_name}' already added. You can remove it with 'remove' command."
     end
   end
   
@@ -268,6 +248,8 @@ module MagicMonkey
         end
         Conf.delete(app_name)
         Conf.save
+      else
+        puts "Application '#{app_name}' does not exist. You can add it with 'add' command."
       end
     end
   end
