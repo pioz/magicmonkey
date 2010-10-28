@@ -1,6 +1,63 @@
-= magic_monkey
+= Magicmonkey
 
-Description goes here.
+Magicmonkey is a useful script that can manage your Ruby on Rails application.
+Magicmonkey allows you to build in easy way the follow web server architecture:
+
+
+    +---------------------------------------------------------------------------------------------------+
+    | Apache web server                                                                                 |
+    | +----------------------+      +----------------------+               +----------------------+     |
+    | |Proxy A (virtual host)|      |Proxy B (virtual host)|               |Proxy C (virtual host)|     |
+    | +---------^------------+      +---------^------------+               +---------^------------+     |
+    |           |                             |                                      |                  |
+    +-----------|-----------------------------|--------------------------------------|------------------+
+                |                             |                                      |
+    +-----------v-------------------+ +-------v-----------------------+ +------------v------------------+
+    | Application server standalone | | Application server standalone | | Application server standalone |
+    | Phusion passenger             | | Phusion passenger             | | Thin                          |
+    | Ruby 1.9.2                    | | Ree 1.8.7                     | | Ruby 1.9.2                    |
+    | Listen on port 3000           | | Listen on port 3001           | | Listen on port 3002           |
+    | Site foo.com                  | | Site bar.com                  | | Site wella.com                |
+    +-------------------------------+ +-------------------------------+ +-------------------------------+
+    
+    
+Every your web application have a virtual host like this:
+
+    <VirtualHost *:80>
+      ServerName foo.com
+      PassengerEnabled off
+      ProxyPass / http://127.0.0.1:3000/
+      ProxyPassReverse / http://127.0.0.1:3000/
+    </VirtualHost>
+
+A proxy that speak with an application server standalone mode (like Phusion Passenger v3) that run with a specific Ruby version.
+To do this you need to have install RVM to manage multiply Ruby versions.
+
+== Install
+
+    gem install magicmonkey
+    
+== Usage
+
+First of all you need to say to Magicmonkey that you want manage an application in this way. To to this use the magicmonkey command 'ADD':
+
+    magicmonkey add APP_NAME [options]
+    
+When added, you can start, stop, restart the application
+
+    magicmonkey {start|stop|restart} APP_NAME1, APP_NAME2, ...
+
+If no application is given start, stop, restart all application.
+
+You can show the configuration of all your applications with
+
+    magicmonkey show
+
+Magicmonkey save the configuration in <tt>~/.magicmonkey.yml</tt>
+
+== Support
+
+You can use this email address for any questions or help: mailto:enrico@megiston.it.
 
 == Note on Patches/Pull Requests
  
@@ -14,4 +71,4 @@ Description goes here.
 
 == Copyright
 
-Copyright (c) 2010 pioz. See LICENSE for details.
+Copyright (c) 2010 Enrico Pilotto. See LICENSE for details.
