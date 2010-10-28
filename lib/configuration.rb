@@ -18,8 +18,8 @@ class Conf
       vht << "<VirtualHost tagi:80>\n"
       vht << "  ServerName $SERVER_NAME\n"
       vht << "  PassengerEnabled off\n"
-      vht << "  ProxyPass / http://127.0.0.1:$PORT\n"
-      vht << "  ProxyPassReverse / http://127.0.0.1:$PORT\n"
+      vht << "  ProxyPass / http://127.0.0.1:$PORT/\n"
+      vht << "  ProxyPassReverse / http://127.0.0.1:$PORT/\n"
       vht << "</VirtualHost>\n"
       @config = {:vhost_template => vht}
       self.save
