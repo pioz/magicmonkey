@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{magicmonkey}
-  s.version = "0.0.7"
+  s.version = "0.0.8"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["pioz"]
-  s.date = %q{2010-10-27}
+  s.date = %q{2010-10-28}
   s.default_executable = %q{magicmonkey}
   s.description = %q{Manage your Rails applications: different Ruby versions and different application servers}
   s.email = %q{enrico@megiston.it}
