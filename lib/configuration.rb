@@ -60,7 +60,7 @@ class Conf
   def self.ports
     p = []
     Conf.instance.config.each do |k, v|
-      p << v[:port] if v[:port]
+      p << v[:port] if v.class == Hash && v[:port]
     end
     return p
   end
