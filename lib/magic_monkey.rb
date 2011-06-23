@@ -38,7 +38,7 @@ module MagicMonkey
     puts "For more information about a specific command, please type"
     puts "'magicmonkey <COMMAND> --help', e.g. 'magicmonkey add --help'."
   end
-  
+
   def self.show(argv)
     applications = argv
     applications = Conf.applications.keys if argv.empty?
@@ -53,13 +53,13 @@ module MagicMonkey
       end
     end
   end
-  
+
   def self.start(argv)
-		v, help = common_options(argv)
-		if help
-			puts 'Start a web application added with ADD command. If no params are given start all web applications.'
-			exit
-		end
+    v, help = common_options(argv)
+    if help
+      puts 'Start a web application added with ADD command. If no params are given start all web applications.'
+      exit
+    end
     applications = argv
     applications = Conf.applications.keys if argv.empty?
     applications.each do |app_name|
@@ -74,44 +74,44 @@ module MagicMonkey
         when 'thin'
           commands << "thin start -e production -p #{Conf[app_name][:port]} -d"
         end
-				print "Starting '#{app_name}' application..."
-				STDOUT.flush
+        print "Starting '#{app_name}' application..."
+        STDOUT.flush
         output = `bash -c "#{commands.join(' && ')}"`
-				puts ' done.'
-				print output if v
+        puts ' done.'
+        print output if v
       end
     end
   end
-  
+
   def self.stop(argv)
-		v, help = common_options(argv)
-		if help
-			puts 'Stop a web application added with ADD command. If no params are given stop all web applications.'
-			exit
-		end
+    v, help = common_options(argv)
+    if help
+      puts 'Stop a web application added with ADD command. If no params are given stop all web applications.'
+      exit
+    end
     applications = argv
     applications = Conf.applications.keys if argv.empty?
     applications.each do |app_name|
       if Conf[app_name]
         commands = []
-        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
+        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'" if Conf[app_name][:ruby] != 'auto'
         commands << "cd '#{Conf[app_name][:app_path]}'"
-        commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'"
+        commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'" if Conf[app_name][:ruby] != 'auto'
         case Conf[app_name][:app_server]
         when 'passenger'
           commands << "passenger stop -p #{Conf[app_name][:port]}"
         when 'thin'
           commands << "thin stop -p #{Conf[app_name][:port]}"
         end
-				print "Stopping '#{app_name}' application..."
-				STDOUT.flush
+        print "Stopping '#{app_name}' application..."
+        STDOUT.flush
         output = `bash -c "#{commands.join(' && ')}"`
-				puts ' done.'
-				print output if v
+        puts ' done.'
+        print output if v
       end
     end
   end
-  
+
   def self.restart(argv)
     applications = argv
     applications = Conf.applications.keys if argv.empty?
@@ -120,7 +120,7 @@ module MagicMonkey
       self.start([app_name])
     end
   end
-  
+
   def self.add(argv)
     options = {}
     tmp = argv.join('$$').split(/\$\$--\$\$/)
@@ -128,11 +128,10 @@ module MagicMonkey
     options[:app_server_options] = tmp[1] ? tmp[1].split('$$').join(' ') : ''
     servers = ['passenger', 'thin']
     ports   = (3000..4000).to_a.collect{|p| p.to_s}
-    rubies  = ['default', '1.9.2', '1.8.7', 'ree']
     options[:app_server] = servers.first
     options[:app_path]   = '/var/sites/APP_NAME/current'
     options[:port]       = nil
-    options[:ruby]       = rubies.first
+    options[:ruby]       = 'auto'
     options[:vhost_path] = '/etc/apache2/sites-available'
     vhost_template       = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
     force                = false
@@ -140,7 +139,7 @@ module MagicMonkey
     enable_site          = true
     reload_apache        = false
     server_name          = nil
-        
+
     parser = OptionParser.new do |opts|
       opts.banner = 'Usage: magicmonkey add APP_NAME [options] [-- application_server_options]'
       opts.separator ''
@@ -161,7 +160,7 @@ module MagicMonkey
       opts.on('-p', '--port NUMBER', ports, "Use the given port number (min: #{ports.first}, max: #{ports.last}).") do |p|
         options[:port] = p.to_i
       end
-      opts.on('-r', '--ruby RUBY_VERSION', rubies, "Use the given Ruby version: #{rubies.join(', ')} (default: #{options[:ruby]}).") do |r|
+      opts.on('-r', '--ruby RUBY_VERSION', "Use the given Ruby version (default: auto).") do |r|
         options[:ruby] = r
       end
       opts.on('-f', '--[no-]force', "Force mode: replace exist files (default: #{force}).") do |f|
@@ -237,7 +236,7 @@ module MagicMonkey
       puts "Application '#{app_name}' already added. You can remove it with 'remove' command."
     end
   end
-  
+
   def self.remove(argv)
     argv.each do |app_name|
       if Conf[app_name]
@@ -253,9 +252,9 @@ module MagicMonkey
       end
     end
   end
-  
+
   private
-  
+
   def self.get_port(port)
     ports = Conf.ports
     return 3000 if ports.nil? || ports.empty?
@@ -264,14 +263,14 @@ module MagicMonkey
     return port
   end
 
-	def self.common_options(argv)
-		verbose = argv.include?('-v') || argv.include?('--version')
-		help = argv.include?('-h') || argv.include?('--help')
-		argv.delete('-v')
-		argv.delete('--version')
-		argv.delete('-h')
-		argv.delete('--help')
-		return verbose, help
-	end
+  def self.common_options(argv)
+    verbose = argv.include?('-v') || argv.include?('--version')
+    help = argv.include?('-h') || argv.include?('--help')
+    argv.delete('-v')
+    argv.delete('--version')
+    argv.delete('-h')
+    argv.delete('--help')
+    return verbose, help
+  end
 
 end
