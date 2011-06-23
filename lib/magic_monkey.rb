@@ -65,9 +65,9 @@ module MagicMonkey
     applications.each do |app_name|
       if Conf[app_name]
         commands = []
-        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
+        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'" if Conf[app_name][:ruby] != 'auto'
         commands << "cd '#{Conf[app_name][:app_path]}'"
-        commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'"
+        commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'" if Conf[app_name][:ruby] != 'auto'
         case Conf[app_name][:app_server]
         when 'passenger'
           commands << "passenger start -e production -p #{Conf[app_name][:port]} #{Conf[app_name][:app_server_options]} -d"
