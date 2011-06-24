@@ -65,14 +65,16 @@ module MagicMonkey
     applications.each do |app_name|
       if Conf[app_name]
         commands = []
-        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'" if Conf[app_name][:ruby] != 'auto'
+        if Conf[app_name][:ruby] != 'auto'
+          commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
+          commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'"
+        end
         commands << "cd '#{Conf[app_name][:app_path]}'"
-        commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'" if Conf[app_name][:ruby] != 'auto'
         case Conf[app_name][:app_server]
         when 'passenger'
           commands << "passenger start -e production -p #{Conf[app_name][:port]} #{Conf[app_name][:app_server_options]} -d"
         when 'thin'
-          commands << "thin start -e production -p #{Conf[app_name][:port]} -d"
+          commands << "thin start -e production -p #{Conf[app_name][:port]} #{Conf[app_name][:app_server_options]} -d"
         end
         print "Starting '#{app_name}' application..."
         STDOUT.flush
@@ -94,9 +96,11 @@ module MagicMonkey
     applications.each do |app_name|
       if Conf[app_name]
         commands = []
-        commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'" if Conf[app_name][:ruby] != 'auto'
+        if Conf[app_name][:ruby] != 'auto'
+          commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
+          commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'"
+        end
         commands << "cd '#{Conf[app_name][:app_path]}'"
-        commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'" if Conf[app_name][:ruby] != 'auto'
         case Conf[app_name][:app_server]
         when 'passenger'
           commands << "passenger stop -p #{Conf[app_name][:port]}"
