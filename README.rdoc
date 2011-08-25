@@ -1,6 +1,6 @@
 = Magicmonkey
 
-Magicmonkey is a useful script that can manage your Ruby on Rails application.
+Magicmonkey is a useful script that can manage your Ruby on Rails applications.
 Magicmonkey allows you to build in easy way the follow web server architecture:
 
 
@@ -21,7 +21,7 @@ Magicmonkey allows you to build in easy way the follow web server architecture:
     +-------------------------------+ +-------------------------------+ +-------------------------------+
     
     
-Every your web application have a virtual host like this:
+Every your web applications have a virtual host like this:
 
     <VirtualHost *:80>
       ServerName foo.com
