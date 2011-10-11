@@ -1,7 +1,8 @@
 require 'optparse'
 require 'pp'
 require 'etc'
-require "#{$APP_PATH}/lib/configuration"
+require "#{$APP_PATH}/lib/magicmonkey/version"
+require "#{$APP_PATH}/lib/magicmonkey/configuration"
 
 module MagicMonkey
   COMMANDS = [:start, :stop, :restart, :add, :remove, :show]
@@ -11,7 +12,7 @@ module MagicMonkey
     Process::UID.change_privilege(Conf[:uid] || Process.uid)
     command = argv[0]
     if command == '-v' || command == '--version'
-      puts File.exist?("#{$APP_PATH}/VERSION") ? File.read("#{$APP_PATH}/VERSION").strip : ''
+      puts Magicmonkey::VERSION
       exit
     elsif command.nil? || command == '-h' || command == '--help' || !COMMANDS.include?(command.to_sym)
       main_help
