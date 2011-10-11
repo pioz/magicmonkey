@@ -261,11 +261,11 @@ module MagicMonkey
 
   private
 
-  def self.get_port(port)
+  def self.get_port(port = nil)
     ports = Conf.ports
     return 3000 if ports.nil? || ports.empty?
     return false if ports.include?(port)
-    return ports.max + 1 if port.nil?
+    return ((3000..5000).to_a - ports).first if port.nil?
     return port
   end
 
