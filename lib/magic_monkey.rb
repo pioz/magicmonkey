@@ -217,6 +217,7 @@ module MagicMonkey
       if input.upcase == "Y\n" || input == "\n"
         if create_vhost
           vh = YAML.load_file(vhost_template)[:vhost_template]
+          vh.gsub!('$APP_NAME', app_name)
           vh.gsub!('$SERVER_NAME', server_name || app_name)
           #vh.gsub!('$DOCUMENT_ROOT', Conf[app_name][:app_path])
           vh.gsub!('$PORT', Conf[app_name][:port].to_s)
