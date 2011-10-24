@@ -1,61 +1,281 @@
 require 'optparse'
 require 'pp'
-require 'etc'
+require 'cocaine'
+require 'term/ansicolor'
 require "#{$APP_PATH}/lib/magicmonkey/version"
 require "#{$APP_PATH}/lib/magicmonkey/configuration"
+include Term::ANSIColor
 
 module MagicMonkey
+
   COMMANDS = [:start, :stop, :restart, :add, :remove, :show]
 
-  def self.main(argv)
+  def self.main
+    #Process::UID.change_privilege(Conf[:uid] || Process.uid)
     raise 'You cannot do this as root' if Process.uid == 0
-    Process::UID.change_privilege(Conf[:uid] || Process.uid)
-    command = argv[0]
-    if command == '-v' || command == '--version'
-      puts Magicmonkey::VERSION
+
+    options = Marshal.load(Marshal.dump(Conf[:default]))
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: magicmonkey <command> [<args>]'
+      opts.separator ''
+      opts.separator "Commands: #{COMMANDS.join(' ')}"
+      opts.separator 'For more information about a specific command, please type'
+      opts.separator "'magicmonkey <command> --help', e.g. 'magicmonkey add --help'"
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      parser.order!
+      command = ARGV[0]
+      ARGV.shift
+      raise 'Invalid command.' unless COMMANDS.include?(command.to_sym)
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+    send(command, ARGV, options)
+  end
+
+
+  def self.add(args, o)
+    tmp = args.join('$$').split(/\$\$--\$\$/)
+    args = tmp[0].split('$$')
+    o[:app_server_options] = tmp[1] ? tmp[1].split('$$').join(' ') : nil
+
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: magicmonkey add APP_NAME [options] -- application_server_options'
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on('-s', '--app-server APP_SERVER', "Use the given application server (e.g. passenger, thin, unicorn, default: #{o[:app_server]}).") do |s|
+        o[:app_server] = s
+      end
+      opts.on('-p', '--port NUMBER', Integer, "Use the given port number (default: #{Conf.next_port}).") do |p|
+        o[:port] = p
+      end
+      opts.on('-r', '--ruby RUBY_VERSION', "Use the given Ruby version (default: #{o[:ruby]}).") do |r|
+        o[:ruby] = r
+      end
+      opts.on('--app-path APP_PATH', "Use the given application path (default #{o[:app_path]}).") do |path|
+        o[:app_path] = path
+      end
+      opts.on('--server-name SERVER_NAME', "Use the given server name (default: #{o[:server_name]}).") do |name|
+        o[:server_name] = name
+      end
+      opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file.") do |template|
+        o[:vhost_template] = template
+      end
+      opts.on('--vhost-path VHOST_PATH', "Use the given virtual host path (default: '#{o[:vhost_path]}').") do |path|
+        o[:vhost_path] = path
+      end
+      opts.on('-f', '--[no-]overwrite-files', "Replace exist files (default: #{o[:overwrite_files]}).") do |f|
+        o[:overwrite_files] = f
+      end
+      opts.on('--[no-]create-vhost', "Create virtual host file from template (default: #{o[:create_vhost]}).") do |c|
+        o[:create_vhost] = c
+      end
+      opts.on('--[no-]enable-site', "Enable Apache virtual host (default: #{o[:enable_site]}).") do |e|
+        o[:enable_site] = e
+      end
+      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default: #{o[:reload_apache]}).") do |r|
+        o[:reload_apache] = r
+      end
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+      raise 'Missing application name.' if args.size != 1
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+
+    # Ok goo
+    app_name = args.first
+    if Conf.applications.include?(app_name.to_sym)
+      rputs "Application '#{app_name}' already added. Try to use another name."
       exit
-    elsif command.nil? || command == '-h' || command == '--help' || !COMMANDS.include?(command.to_sym)
-      main_help
+    end
+    o[:app_path].gsub!('$APP_NAME', app_name) if o[:app_path] == Conf[:default][:app_path]
+    o[:server_name].gsub!('$APP_NAME', app_name) if o[:server_name] == Conf[:default][:server_name]
+    o[:port] ||= Conf.next_port
+    if Conf.ports.include?(o[:port])
+      rputs 'Invalid port number. This port is used by another application or is invalid.'
       exit
-    else
-      send(command, argv[1..-1])
+    end
+    self.check_ruby_version!(o[:ruby])
+    self.check_app_server!(o[:app_server])
+    o[:vhost_template].gsub!('$APP_NAME', app_name)
+    o[:vhost_template].gsub!('$SERVER_NAME', o[:server_name])
+    o[:vhost_template].gsub!('$PORT', o[:port].to_s)
+
+    puts "Configuration for application '#{app_name}' is:"
+    pp o
+    print 'Add this application? [Y/n]'
+    input = STDIN.gets
+    if input.upcase == "Y\n" || input == "\n"
+      Conf[app_name] = o
+      Conf.save
+      puts "Application '#{app_name}' added."
+      puts "use 'magicmonkey start #{app_name}' to start the application."
     end
   end
 
-  def self.main_help
-    puts 'Description here'
-    puts
-    puts 'Available commands:'
-    puts
-    COMMANDS.each do |c|
-      puts "  magicmonkey #{c}\t\tdesc"
+  def self.check_ruby_version!(ruby)
+    rubies = ['default', 'system']
+    begin
+      res = Cocaine::CommandLine.new('rvm list').run
+    rescue Cocaine::CommandNotFoundError
+      rputs 'RVM (Ruby Verison Manager) is not installed in your system. Please install RVM to use Magicmonkey.'
+      exit
     end
-    puts
-    puts "Special options:"
-    puts
-    puts "  magicmonkey --help\t\tDisplay this help message."
-    puts "  magicmonkey --version\t\tDisplay version number."
-    puts
-    puts "For more information about a specific command, please type"
-    puts "'magicmonkey <COMMAND> --help', e.g. 'magicmonkey add --help'."
+    res.each_line do |line|
+      match = line.match(/\s((?:ruby|jruby|rbx|ree|macruby|maglev|ironruby)\S+?)\s/)
+      rubies << match[1] if match
+    end
+    unless rubies.include?(ruby)
+      rputs "Ruby version specified ('#{ruby}') is not installed in your system."
+      rputs "Valid Ruby versions are: #{rubies.join(', ')}."
+      exit
+    end
   end
 
-  def self.show(argv)
-    applications = argv
-    applications = Conf.applications.keys if argv.empty?
+  def self.check_app_server!(app_server)
+    unless app_server
+      rputs 'You must specify the application server.'
+      rputs 'Please use --app-server option. e.g. magicmonkey add APP_NAME --app-server=passenger'
+      exit
+    end
+    begin
+      Cocaine::CommandLine.new(app_server).run
+    rescue Cocaine::CommandNotFoundError
+      rputs "The application server '#{app_server}' is not installed in your system."
+      rputs 'Please use a valid and installed application server.'
+      exit
+    rescue
+    end
+    begin
+      require "#{$APP_PATH}/lib/magicmonkey/app_servers/#{app_server}"
+      const_get(app_server.capitalize)
+    rescue LoadError, NameError
+      rputs "No module '#{app_server.capitalize}' found in #{$APP_PATH}/lib/magicmonkey/app_servers/#{app_server}.rb"
+      rputs "You must create a module called '#{app_server.capitalize}' with two methods: self.start(args) and self.stop(args)."
+      exit
+    end
+  end
+
+  def self.start(args, o = {})
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: magicmonkey start APP_NAME'
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+
+    applications = args
+    applications = Conf.applications if applications.empty?
     applications.each do |app_name|
-      if Conf[app_name]
-        puts app_name
-        puts '-'*app_name.to_s.size
-        pp Conf[app_name]
-        puts
+      o = Conf[app_name.to_sym]
+      if o
+        check_ruby_version!(o[:ruby])
+        server = check_app_server!(o[:app_server])
+        print "Starting '#{app_name}' application..."
+        STDOUT.flush
+        output = `#{self.run(o){server.start(o)}}`
+        puts ' done.'
+
       else
-        puts "Application '#{app_name}' not found."
+        rputs "Application '#{app_name}' is not added."
+        rputs "use 'magicmonkey add #{app_name}' to add this application."
       end
     end
   end
 
-  def self.start(argv)
+  def self.stop(args, o = {})
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: magicmonkey stop APP_NAME'
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+
+    applications = args
+    applications = Conf.applications if applications.empty?
+    applications.each do |app_name|
+      o = Conf[app_name.to_sym]
+      if o
+        check_ruby_version!(o[:ruby])
+        server = check_app_server!(o[:app_server])
+        print "Stopping '#{app_name}' application..."
+        STDOUT.flush
+        output = `#{self.run(o){server.stop(o)}}`
+        puts ' done.'
+      else
+        rputs "Application '#{app_name}' is not added."
+        rputs "use 'magicmonkey add #{app_name}' to add this application."
+      end
+    end
+  end
+
+  def self.restart(args, o = {})
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: magicmonkey restart APP_NAME'
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+
+    applications = args
+    applications = Conf.applications if applications.empty?
+    applications.each do |app_name|
+      o = Conf[app_name.to_sym]
+      if o
+        check_ruby_version!(o[:ruby])
+        server = check_app_server!(o[:app_server])
+        print "Restarting '#{app_name}' application..."
+        STDOUT.flush
+        output = `#{self.run(o){server.stop(o)}} && #{self.run(o){server.start(o)}}`
+        puts ' done.'
+      else
+        rputs "Application '#{app_name}' is not added."
+        rputs "use 'magicmonkey add #{app_name}' to add this application."
+      end
+    end
+  end
+
+  def self.run(options)
+    lines = []
+    lines << Cocaine::CommandLine.new('source', "#{Dir.home}/.rvm/scripts/rvm")
+    lines << Cocaine::CommandLine.new('rvm', "use #{options[:ruby]}")
+    lines << Cocaine::CommandLine.new('cd', options[:app_path])
+    lines << Cocaine::CommandLine.new(yield)
+    return "bash -c '#{lines.map(&:command).join(' && ')}'"
+  end
+
+  def self.start2(argv)
     v, help = common_options(argv)
     if help
       puts 'Start a web application added with ADD command. If no params are given start all web applications.'
@@ -67,7 +287,7 @@ module MagicMonkey
       if Conf[app_name]
         commands = []
         if Conf[app_name][:ruby] != 'auto'
-          commands << "source '#{Etc.getpwuid.dir}/.rvm/scripts/rvm'"
+          commands << "source '#{Dir.home}/.rvm/scripts/rvm'"
           commands << "rvm #{v ? 'use ' : ''}'#{Conf[app_name][:ruby]}'"
         end
         commands << "cd '#{Conf[app_name][:app_path]}'"
@@ -86,7 +306,7 @@ module MagicMonkey
     end
   end
 
-  def self.stop(argv)
+  def self.stop2(argv)
     v, help = common_options(argv)
     if help
       puts 'Stop a web application added with ADD command. If no params are given stop all web applications.'
@@ -117,7 +337,7 @@ module MagicMonkey
     end
   end
 
-  def self.restart(argv)
+  def self.restart2(argv)
     applications = argv
     applications = Conf.applications.keys if argv.empty?
     applications.each do |app_name|
@@ -126,7 +346,7 @@ module MagicMonkey
     end
   end
 
-  def self.add(argv)
+  def self.add2(argv)
     options = {}
     tmp = argv.join('$$').split(/\$\$--\$\$/)
     argv = tmp[0].split('$$')
@@ -138,7 +358,7 @@ module MagicMonkey
     options[:port]       = nil
     options[:ruby]       = 'auto'
     options[:vhost_path] = '/etc/apache2/sites-available'
-    vhost_template       = "#{Etc.getpwuid.dir}/.magicmonkey.yml"
+    vhost_template       = "#{Dir.home}/.magicmonkey.yml"
     force                = false
     create_vhost         = true
     enable_site          = true
@@ -260,6 +480,10 @@ module MagicMonkey
   end
 
   private
+
+  def self.rputs(message)
+    puts "#{red}#{message}#{reset}"
+  end
 
   def self.get_port(port = nil)
     ports = Conf.ports

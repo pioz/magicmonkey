@@ -1,17 +1,20 @@
 # -*- encoding: utf-8 -*-
-$:.push File.expand_path("../lib", __FILE__)
-require "magicmonkey/version"
+$:.push File.expand_path('../lib', __FILE__)
+require 'magicmonkey/version'
 
 Gem::Specification.new do |s|
-  s.name        = "magicmonkey"
+  s.name        = 'magicmonkey'
   s.version     = Magicmonkey::VERSION
-  s.authors     = ["Enrico Pilotto"]
-  s.email       = ["enrico@megiston.it"]
-  s.homepage    = "https://github.com/pioz/magicmonkey"
+  s.authors     = ['Enrico Pilotto']
+  s.email       = ['enrico@megiston.it']
+  s.homepage    = 'https://github.com/pioz/magicmonkey'
   s.summary     = %q{Manage your Rails applications: different Ruby versions and different application servers}
   s.description = %q{Manage your Rails applications: different Ruby versions and different application servers.}
 
-  s.rubyforge_project = "magicmonkey"
+  s.rubyforge_project = 'magicmonkey'
+
+  s.add_dependency('cocaine')
+  s.add_dependency('term-ansicolor')
 
   s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
