@@ -134,10 +134,9 @@ module MagicMonkey
         vh_file = "#{o[:vhost_path]}/#{app_name}"
         if (!File.exist?(vh_file) || o[:overwrite_files])
           begin
-            Cocaine::CommandLine.new('sudo echo', "'#{o[:vhost_template]}' > #{vh_file}").run
+            Cocaine::CommandLine.new("sudo bash -c \"echo '#{o[:vhost_template]}' > #{vh_file}\"").run
           rescue Cocaine::ExitStatusError => e
             rputs 'Failed to write virtual host file.'
-            exit
           end
         else
           puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it. Skip creation."
@@ -148,7 +147,6 @@ module MagicMonkey
           Cocaine::CommandLine.new("sudo a2ensite '#{app_name}'").run
         rescue Cocaine::ExitStatusError => e
           rputs 'Failed to enable the site.'
-          exit
         end
       end
       if o[:enable_site] && o[:reload_apache]
@@ -156,7 +154,6 @@ module MagicMonkey
           Cocaine::CommandLine.new('sudo /etc/init.d/apache2 reload').run
         rescue Cocaine::ExitStatusError => e
           rputs 'Failed to reload Apache.'
-          exit
         end
       end
       Conf[app_name] = o.select{|k,v| [:ruby, :port, :app_server, :app_server_options, :app_path, :vhost_path].include?(k)}
@@ -266,6 +263,7 @@ module MagicMonkey
     applications = args
     applications = Conf.applications if applications.empty?
     applications.each do |app_name|
+      puts app_name.upcase
       pp Conf[app_name]
       puts '-'*80
     end
