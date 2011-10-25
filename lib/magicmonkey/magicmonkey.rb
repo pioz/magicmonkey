@@ -56,7 +56,7 @@ module MagicMonkey
   def self.add(args, o = {})
     tmp = args.join('$$').split(/\$\$--\$\$/)
     args = tmp[0].split('$$')
-    o[:app_server_options] = tmp[1] ? tmp[1].split('$$').join(' ') : nil
+    o[:app_server_options] = tmp[1].split('$$').join(' ') if tmp[1]
 
     parser = OptionParser.new do |opts|
       opts.banner = 'Usage: magicmonkey add APP_NAME [options] -- application_server_options'
