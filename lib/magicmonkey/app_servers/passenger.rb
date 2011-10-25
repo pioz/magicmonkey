@@ -5,7 +5,7 @@ module Passenger
   end
 
   def self.stop(args = {})
-    return 'passenger stop'
+    return "passenger stop -p #{args[:port]}"
   end
 
   def self.restart(args = {})

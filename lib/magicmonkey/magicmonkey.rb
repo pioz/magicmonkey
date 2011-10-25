@@ -168,10 +168,14 @@ module MagicMonkey
   end
 
   def self.remove(args)
+    o = {:remove_vhost => false}
     parser = OptionParser.new do |opts|
       opts.banner = 'Usage: magicmonkey remove APP_NAME'
       opts.separator ''
       opts.separator 'Options:'
+      opts.on('--[no-]remove-vhost', "Remove the virtual host file if exist (default: #{o[:remove_vhost]}).") do |r|
+        o[:remove_vhost] = r
+      end
       opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
       opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
     end
@@ -185,7 +189,7 @@ module MagicMonkey
     app_name = args.first
     if Conf[app_name]
       vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
-      if File.exist?(vh_file)
+      if o[:remove_vhost] && File.exist?(vh_file)
         begin
           Cocaine::CommandLine.new("sudo a2dissite '#{app_name}' && sudo rm -f '#{vh_file}'").run
         rescue Cocaine::ExitStatusError => e
