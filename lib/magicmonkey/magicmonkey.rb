@@ -140,8 +140,7 @@ module MagicMonkey
             exit
           end
         else
-          puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
-          exit
+          puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it. Skip creation."
         end
       end
       if o[:enable_site]
