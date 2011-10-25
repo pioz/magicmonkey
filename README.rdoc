@@ -19,13 +19,12 @@ Magicmonkey allows you to build in easy way the follow web server architecture:
     | Listen on port 3000           | | Listen on port 3001           | | Listen on port 3002           |
     | Site foo.com                  | | Site bar.com                  | | Site wella.com                |
     +-------------------------------+ +-------------------------------+ +-------------------------------+
-    
-    
+
+
 Every your web applications have a virtual host like this:
 
     <VirtualHost *:80>
       ServerName foo.com
-      PassengerEnabled off
       ProxyPass / http://127.0.0.1:3000/
       ProxyPassReverse / http://127.0.0.1:3000/
     </VirtualHost>
@@ -36,13 +35,13 @@ To do this you need to have install RVM to manage multiply Ruby versions.
 == Install
 
     gem install magicmonkey
-    
+
 == Usage
 
 First of all you need to say to Magicmonkey that you want manage an application in this way. To to this use the magicmonkey command 'ADD':
 
     magicmonkey add APP_NAME [options]
-    
+
 When added, you can start, stop, restart the application
 
     magicmonkey {start|stop|restart} APP_NAME1, APP_NAME2, ...
@@ -60,7 +59,7 @@ Magicmonkey save the configuration in <tt>~/.magicmonkey.yml</tt>
 You can use this email address for any questions or help: mailto:enrico@megiston.it.
 
 == Note on Patches/Pull Requests
- 
+
 * Fork the project.
 * Make your feature addition or bug fix.
 * Add tests for it. This is important so I don't break it in a
