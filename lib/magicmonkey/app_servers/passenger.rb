@@ -8,4 +8,8 @@ module Passenger
     return 'passenger stop'
   end
 
+  def self.restart(args = {})
+    [self.stop(args), 'sleep 3', self.start(args)]
+  end
+
 end

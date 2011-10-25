@@ -35,11 +35,25 @@ module MagicMonkey
       rputs e
       puts parser.help; exit
     end
-    send(command, ARGV, options)
+
+    case command
+    when 'add'
+      self.add(ARGV, options)
+    when 'start'
+      start_stop_restart(:start, ARGV)
+    when 'stop'
+      start_stop_restart(:stop, ARGV)
+    when 'restart'
+      start_stop_restart(:restart, ARGV)
+    when 'remove'
+      remove(ARGV)
+    when 'show'
+      show(ARGV)
+    end
   end
 
 
-  def self.add(args, o)
+  def self.add(args, o = {})
     tmp = args.join('$$').split(/\$\$--\$\$/)
     args = tmp[0].split('$$')
     o[:app_server_options] = tmp[1] ? tmp[1].split('$$').join(' ') : nil
@@ -114,14 +128,141 @@ module MagicMonkey
     puts "Configuration for application '#{app_name}' is:"
     pp o
     print 'Add this application? [Y/n]'
-    input = STDIN.gets
-    if input.upcase == "Y\n" || input == "\n"
+    input = STDIN.gets.chop
+    if input.upcase == 'Y' || input == ''
+      if o[:create_vhost]
+        vh_file = "#{o[:vhost_path]}/#{app_name}"
+        if (!File.exist?(vh_file) || o[:overwrite_files])
+          begin
+            Cocaine::CommandLine.new('sudo echo', "'#{o[:vhost_template]}' > #{vh_file}").run
+          rescue Cocaine::ExitStatusError => e
+            rputs 'Failed to write virtual host file.'
+            exit
+          end
+        else
+          puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
+          exit
+        end
+      end
+      if o[:enable_site]
+        begin
+          Cocaine::CommandLine.new("sudo a2ensite '#{app_name}'").run
+        rescue Cocaine::ExitStatusError => e
+          rputs 'Failed to enable the site.'
+          exit
+        end
+      end
+      if o[:enable_site] && o[:reload_apache]
+        begin
+          Cocaine::CommandLine.new('sudo /etc/init.d/apache2 reload').run
+        rescue Cocaine::ExitStatusError => e
+          rputs 'Failed to reload Apache.'
+          exit
+        end
+      end
       Conf[app_name] = o
       Conf.save
-      puts "Application '#{app_name}' added."
+
+      puts "#{green}Application '#{app_name}' added.#{reset}"
       puts "use 'magicmonkey start #{app_name}' to start the application."
     end
   end
+
+  def self.remove(args)
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: magicmonkey remove APP_NAME'
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+      raise 'Missing application name.' if args.size != 1
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+    app_name = args.first
+    if Conf[app_name]
+      vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
+      if File.exist?(vh_file)
+        begin
+          Cocaine::CommandLine.new("sudo a2dissite '#{app_name}' && sudo rm -f '#{vh_file}'").run
+        rescue Cocaine::ExitStatusError => e
+          rputs 'Failed to remove virtual host file.'
+          exit
+        end
+      end
+      Conf.delete(app_name)
+      Conf.save
+    else
+      rputs "Application '#{app_name}' does not exist."
+    end
+  end
+
+  def self.start_stop_restart(ssr, args)
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: magicmonkey #{ssr} [APP_NAME1 ... APP_NAME2 ...]"
+      opts.separator "If no application name passed, #{ssr} all applications."
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+    applications = args
+    applications = Conf.applications if applications.empty?
+    applications.each do |app_name|
+      o = Conf[app_name.to_sym]
+      if o
+        check_ruby_version!(o[:ruby])
+        server = check_app_server!(o[:app_server])
+        print "Calling #{bold}#{ssr}#{reset} for '#{app_name}' application..."
+        STDOUT.flush
+        begin
+          output = self.run(o){server.send(ssr, o)}
+          puts " #{green}#{bold}done#{reset}."
+        rescue Cocaine::ExitStatusError => e
+          puts ''
+          rputs "Failed to #{ssr} application '#{app_name}'"
+        end
+      else
+        rputs "Application '#{app_name}' is not added."
+        rputs "use 'magicmonkey add #{app_name}' to add this application."
+      end
+    end
+  end
+
+  def self.show(args)
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: magicmonkey show [APP_NAME1 ... APP_NAME2 ...]"
+      opts.separator 'If no application name passed, show the configuration of all applications.'
+      opts.separator ''
+      opts.separator 'Options:'
+      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+    rescue => e
+      rputs e
+      puts parser.help; exit
+    end
+    applications = args
+    applications = Conf.applications if applications.empty?
+    applications.each do |app_name|
+      pp Conf[app_name]
+      puts '-'*80
+    end
+  end
+
+  private
 
   def self.check_ruby_version!(ruby)
     rubies = ['default', 'system']
@@ -161,119 +302,33 @@ module MagicMonkey
       const_get(app_server.capitalize)
     rescue LoadError, NameError
       rputs "No module '#{app_server.capitalize}' found in #{$APP_PATH}/lib/magicmonkey/app_servers/#{app_server}.rb"
-      rputs "You must create a module called '#{app_server.capitalize}' with two methods: self.start(args) and self.stop(args)."
+      rputs "You must create a module called '#{app_server.capitalize}' to tell how to start, stop and restart the server."
       exit
-    end
-  end
-
-  def self.start(args, o = {})
-    parser = OptionParser.new do |opts|
-      opts.banner = 'Usage: magicmonkey start APP_NAME'
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
-    end
-    begin
-      args = parser.parse!(args)
-    rescue => e
-      rputs e
-      puts parser.help; exit
-    end
-
-    applications = args
-    applications = Conf.applications if applications.empty?
-    applications.each do |app_name|
-      o = Conf[app_name.to_sym]
-      if o
-        check_ruby_version!(o[:ruby])
-        server = check_app_server!(o[:app_server])
-        print "Starting '#{app_name}' application..."
-        STDOUT.flush
-        output = `#{self.run(o){server.start(o)}}`
-        puts ' done.'
-
-      else
-        rputs "Application '#{app_name}' is not added."
-        rputs "use 'magicmonkey add #{app_name}' to add this application."
-      end
-    end
-  end
-
-  def self.stop(args, o = {})
-    parser = OptionParser.new do |opts|
-      opts.banner = 'Usage: magicmonkey stop APP_NAME'
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
-    end
-    begin
-      args = parser.parse!(args)
-    rescue => e
-      rputs e
-      puts parser.help; exit
-    end
-
-    applications = args
-    applications = Conf.applications if applications.empty?
-    applications.each do |app_name|
-      o = Conf[app_name.to_sym]
-      if o
-        check_ruby_version!(o[:ruby])
-        server = check_app_server!(o[:app_server])
-        print "Stopping '#{app_name}' application..."
-        STDOUT.flush
-        output = `#{self.run(o){server.stop(o)}}`
-        puts ' done.'
-      else
-        rputs "Application '#{app_name}' is not added."
-        rputs "use 'magicmonkey add #{app_name}' to add this application."
-      end
-    end
-  end
-
-  def self.restart(args, o = {})
-    parser = OptionParser.new do |opts|
-      opts.banner = 'Usage: magicmonkey restart APP_NAME'
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
-    end
-    begin
-      args = parser.parse!(args)
-    rescue => e
-      rputs e
-      puts parser.help; exit
-    end
-
-    applications = args
-    applications = Conf.applications if applications.empty?
-    applications.each do |app_name|
-      o = Conf[app_name.to_sym]
-      if o
-        check_ruby_version!(o[:ruby])
-        server = check_app_server!(o[:app_server])
-        print "Restarting '#{app_name}' application..."
-        STDOUT.flush
-        output = `#{self.run(o){server.stop(o)}} && #{self.run(o){server.start(o)}}`
-        puts ' done.'
-      else
-        rputs "Application '#{app_name}' is not added."
-        rputs "use 'magicmonkey add #{app_name}' to add this application."
-      end
     end
   end
 
   def self.run(options)
     lines = []
-    lines << Cocaine::CommandLine.new('source', "#{Dir.home}/.rvm/scripts/rvm")
-    lines << Cocaine::CommandLine.new('rvm', "use #{options[:ruby]}")
-    lines << Cocaine::CommandLine.new('cd', options[:app_path])
-    lines << Cocaine::CommandLine.new(yield)
-    return "bash -c '#{lines.map(&:command).join(' && ')}'"
+    lines << "source #{Dir.home}/.rvm/scripts/rvm"
+    lines << "rvm use #{options[:ruby]}"
+    lines << "cd #{options[:app_path]}"
+    res = yield
+    if res.class == Array
+      lines += res
+    elsif res.class == String
+      lines << res
+    end
+    line = Cocaine::CommandLine.new("bash -c '#{lines.join(' && ')}'")
+    line.run
   end
+
+  def self.rputs(message)
+    puts "#{red}#{message}#{reset}"
+  end
+
+end
+
+__END__
 
   def self.start2(argv)
     v, help = common_options(argv)

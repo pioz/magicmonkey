@@ -56,7 +56,7 @@ EOT
   end
 
   def self.delete(key)
-    Conf.instance.config.delete(key.to_sym)
+    Conf.instance.config.delete(key.to_sym) if key.to_sym != :default
   end
 
   def self.save
@@ -69,8 +69,8 @@ EOT
 
   def self.ports
     p = []
-    self.applications.each do |k,v|
-      p << v[:port] if v[:port]
+    Conf.instance.config.each do |k,v|
+      p << v[:port] if ![:default, :uid].include?(k) && v[:port]
     end
     return p
   end
