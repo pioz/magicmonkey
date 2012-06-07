@@ -25,7 +25,8 @@ EOT
     :overwrite_files => false,
     :create_vhost => true,
     :enable_site => false,
-    :reload_apache => false
+    :reload_apache => false,
+    :bundle_exec => true
   }
 
   def initialize

@@ -95,6 +95,9 @@ module MagicMonkey
       opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default: #{o[:reload_apache]}).") do |r|
         o[:reload_apache] = r
       end
+      opts.on('--[no-]bundle-exec', "Use bundle exec to run application server (default: #{o[:bundle_exec]}).") do |b|
+        o[:bundle_exec] = b
+      end
       opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
       opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
     end
