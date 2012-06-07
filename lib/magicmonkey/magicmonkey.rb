@@ -159,7 +159,7 @@ module MagicMonkey
           rputs 'Failed to reload Apache.'
         end
       end
-      Conf[app_name] = o.select{|k,v| [:ruby, :port, :app_server, :app_server_options, :app_path, :vhost_path].include?(k)}
+      Conf[app_name] = o.select{|k,v| [:ruby, :port, :app_server, :app_server_options, :app_path, :vhost_path, :bundle_exec].include?(k)}
       Conf.save
 
       puts "#{green}Application '#{app_name}' added.#{reset}"
