@@ -1,7 +1,7 @@
 module UnicornRails
 
   def self.start(args = {})
-    ["unicorn_rails -E production -p #{args[:port]} -c #{args[:app_path]}/config/unicorn.rb #{args[:app_server_options]} -D"]
+    ["unicorn_rails -E production -p #{args[:port]} #{args[:app_server_options]} -D"]
   end
 
   def self.stop(args = {})

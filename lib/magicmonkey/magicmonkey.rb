@@ -45,7 +45,7 @@ module Magicmonkey
   # CONFIGURE COMMAND #
   #####################
   def self.configure(args)
-    app = self.help('configure', 'DESC', args) do |opts|
+    app = self.help('configure', 'Configure the application', args) do |opts|
       opts.on('-c', '--configuration CONFIG_FILE', 'Use this file as configuration') do |c|
         @o[:configuration] = c
       end
