@@ -1,26 +1,29 @@
 require 'optparse'
 require 'pp'
+require 'tempfile'
 require 'cocaine'
 require 'term/ansicolor'
 require "#{$APP_PATH}/lib/magicmonkey/version"
 require "#{$APP_PATH}/lib/magicmonkey/configuration"
 include Term::ANSIColor
 
-module MagicMonkey
+module Magicmonkey
 
-  COMMANDS = [:start, :stop, :restart, :add, :remove, :show]
+  @o = {}
+
+  COMMANDS = %w(configure deconfigure show vhost start stop restart)
 
   def self.main
     #Process::UID.change_privilege(Conf[:uid] || Process.uid)
     raise 'You cannot do this as root' if Process.uid == 0
 
-    options = Marshal.load(Marshal.dump(Conf[:default]))
+    @o = Marshal.load(Marshal.dump(Conf[:default]))
     parser = OptionParser.new do |opts|
       opts.banner = 'Usage: magicmonkey <command> [<args>]'
       opts.separator ''
       opts.separator "Commands: #{COMMANDS.join(' ')}"
       opts.separator 'For more information about a specific command, please type'
-      opts.separator "'magicmonkey <command> --help', e.g. 'magicmonkey add --help'"
+      opts.separator "'magicmonkey <command> --help', e.g. 'magicmonkey configure --help'."
       opts.separator ''
       opts.separator 'Options:'
       opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
@@ -28,251 +31,246 @@ module MagicMonkey
     end
     begin
       parser.order!
-      command = ARGV[0]
-      ARGV.shift
-      raise 'Invalid command.' unless COMMANDS.include?(command.to_sym)
+      command = (ARGV & COMMANDS).first
+      raise 'Invalid command.' unless command
+      ARGV.delete(command)
     rescue => e
-      rputs e
       puts parser.help; exit
     end
-
-    case command
-    when 'add'
-      self.add(ARGV, options)
-    when 'start'
-      start_stop_restart(:start, ARGV)
-    when 'stop'
-      start_stop_restart(:stop, ARGV)
-    when 'restart'
-      start_stop_restart(:restart, ARGV)
-    when 'remove'
-      remove(ARGV)
-    when 'show'
-      show(ARGV)
-    end
+    app = ARGV.first
+    self.send(command, ARGV)
   end
 
-
-  def self.add(args, o = {})
-    tmp = args.join('$$').split(/\$\$--\$\$/)
-    args = tmp[0].split('$$')
-    o[:app_server_options] = tmp[1].split('$$').join(' ') if tmp[1]
-
-    parser = OptionParser.new do |opts|
-      opts.banner = 'Usage: magicmonkey add APP_NAME [options] -- application_server_options'
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on('-s', '--app-server APP_SERVER', "Use the given application server (e.g. passenger, thin, unicorn, default: #{o[:app_server]}).") do |s|
-        o[:app_server] = s
+  #####################
+  # CONFIGURE COMMAND #
+  #####################
+  def self.configure(args)
+    app = self.help('configure', 'DESC', args) do |opts|
+      opts.on('-c', '--configuration CONFIG_FILE', 'Use this file as configuration') do |c|
+        @o[:configuration] = c
       end
-      opts.on('-p', '--port NUMBER', Integer, "Use the given port number (default: #{Conf.next_port}).") do |p|
-        o[:port] = p
-      end
-      opts.on('-r', '--ruby RUBY_VERSION', "Use the given Ruby version (default: #{o[:ruby]}).") do |r|
-        o[:ruby] = r
-      end
-      opts.on('--app-path APP_PATH', "Use the given application path (default #{o[:app_path]}).") do |path|
-        o[:app_path] = path
-      end
-      opts.on('--server-name SERVER_NAME', "Use the given server name (default: #{o[:server_name]}).") do |name|
-        o[:server_name] = name
-      end
-      opts.on('--vhost-template TEMPLATE', "Use the given virtual host template file.") do |template|
-        o[:vhost_template] = template
-      end
-      opts.on('--vhost-path VHOST_PATH', "Use the given virtual host path (default: '#{o[:vhost_path]}').") do |path|
-        o[:vhost_path] = path
-      end
-      opts.on('-f', '--[no-]overwrite-files', "Replace exist files (default: #{o[:overwrite_files]}).") do |f|
-        o[:overwrite_files] = f
-      end
-      opts.on('--[no-]create-vhost', "Create virtual host file from template (default: #{o[:create_vhost]}).") do |c|
-        o[:create_vhost] = c
-      end
-      opts.on('--[no-]enable-site', "Enable Apache virtual host (default: #{o[:enable_site]}).") do |e|
-        o[:enable_site] = e
-      end
-      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default: #{o[:reload_apache]}).") do |r|
-        o[:reload_apache] = r
-      end
-      opts.on('--[no-]bundle-exec', "Use bundle exec to run application server (default: #{o[:bundle_exec]}).") do |b|
-        o[:bundle_exec] = b
-      end
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
-    end
-    begin
-      args = parser.parse!(args)
-      raise 'Missing application name.' if args.size != 1
-    rescue => e
-      rputs e
-      puts parser.help; exit
     end
 
-    # Ok goo
-    app_name = args.first
-    if Conf.applications.include?(app_name.to_sym)
-      rputs "Application '#{app_name}' already added. Try to use another name."
-      exit
+    app_conf = Conf[app.to_sym]
+    unless app_conf
+      app_conf = @o.select{|k,v| [:app_server, :app_server_options, :ruby, :app_path, :bundle_exec].include?(k)}
+      app_conf[:app_path].gsub!('$APP', app)
+      app_conf[:port] = Conf.next_port
     end
-    o[:app_path].gsub!('$APP_NAME', app_name) if o[:app_path] == Conf[:default][:app_path]
-    o[:server_name].gsub!('$APP_NAME', app_name) if o[:server_name] == Conf[:default][:server_name]
-    o[:port] ||= Conf.next_port
-    if Conf.ports.include?(o[:port])
-      rputs 'Invalid port number. This port is used by another application or is invalid.'
-      exit
-    end
-    self.check_ruby_version!(o[:ruby])
-    self.check_app_server!(o[:app_server])
-    o[:vhost_template].gsub!('$APP_NAME', app_name)
-    o[:vhost_template].gsub!('$SERVER_NAME', o[:server_name])
-    o[:vhost_template].gsub!('$PORT', o[:port].to_s)
+    tmpfile = Tempfile.new("#{app}.yml")
+    tmpfile.write(app_conf.to_yaml)
+    tmpfile.close
+    system("#{@o[:editor]} '#{tmpfile.path}'")
+    conf = YAML.load_file(tmpfile.path)
+    tmpfile.unlink
 
-    puts "Configuration for application '#{app_name}' is:"
-    pp o
-    print 'Add this application? [Y/n]'
-    input = STDIN.gets.chop
-    if input.upcase == 'Y' || input == ''
-      if o[:create_vhost]
-        vh_file = "#{o[:vhost_path]}/#{app_name}"
-        if (!File.exist?(vh_file) || o[:overwrite_files])
-          begin
-            Cocaine::CommandLine.new("sudo bash -c \"echo '#{o[:vhost_template]}' > #{vh_file}\"").run
-          rescue Cocaine::ExitStatusError => e
-            rputs 'Failed to write virtual host file.'
-          end
-        else
-          puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it. Skip creation."
-        end
-      end
-      if o[:enable_site]
-        begin
-          Cocaine::CommandLine.new("sudo a2ensite '#{app_name}'").run
-        rescue Cocaine::ExitStatusError => e
-          rputs 'Failed to enable the site.'
-        end
-      end
-      if o[:enable_site] && o[:reload_apache]
-        begin
-          Cocaine::CommandLine.new('sudo /etc/init.d/apache2 reload').run
-        rescue Cocaine::ExitStatusError => e
-          rputs 'Failed to reload Apache.'
-        end
-      end
-      Conf[app_name] = o.select{|k,v| [:ruby, :port, :app_server, :app_server_options, :app_path, :vhost_path, :bundle_exec].include?(k)}
-      Conf.save
+    self.check_port!(conf[:port]) if app_conf[:port] != conf[:port]
+    self.check_ruby_version!(conf[:ruby])
+    self.check_app_server!(conf[:app_server])
 
-      puts "#{green}Application '#{app_name}' added.#{reset}"
-      puts "use 'magicmonkey start #{app_name}' to start the application."
-    end
+    Conf[app.to_sym] = conf
+    Conf.save
   end
 
-  def self.remove(args)
-    o = {:remove_vhost => false}
-    parser = OptionParser.new do |opts|
-      opts.banner = 'Usage: magicmonkey remove APP_NAME'
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on('--[no-]remove-vhost', "Remove the virtual host file if exist (default: #{o[:remove_vhost]}).") do |r|
-        o[:remove_vhost] = r
-      end
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
-    end
-    begin
-      args = parser.parse!(args)
-      raise 'Missing application name.' if args.size != 1
-    rescue => e
-      rputs e
-      puts parser.help; exit
-    end
-    app_name = args.first
-    if Conf[app_name]
-      self.start_stop_restart(:stop, [app_name])
-      begin
-        Cocaine::CommandLine.new("sudo a2dissite '#{app_name}'").run
-      rescue Cocaine::ExitStatusError => e
-        rputs 'Failed to disable site.'
-      end
-      vh_file = "#{Conf[app_name][:vhost_path]}/#{app_name}"
-      if o[:remove_vhost] && File.exist?(vh_file)
-        begin
-          Cocaine::CommandLine.new("sudo rm -f '#{vh_file}'").run
-        rescue Cocaine::ExitStatusError => e
-          rputs 'Failed to remove virtual host file.'
-        end
-      end
-      Conf.delete(app_name)
-      Conf.save
-      puts "Application '#{app_name}' removed."
+  #######################
+  # DECONFIGURE COMMAND #
+  #######################
+  def self.deconfigure(args)
+    app = help('deconfigure', 'The application will no longer be handled by magicmonkey.', args)
+    app_conf = Conf[app.to_sym]
+    unless app_conf
+      rputs "Application '#{app}' does not configured."
+      puts  "Use 'magicmonkey configure #{app}' to configure it."
+      exit
     else
-      rputs "Application '#{app_name}' does not exist."
+      Conf.delete(app)
+      Conf.save
     end
   end
 
-  def self.start_stop_restart(ssr, args)
-    parser = OptionParser.new do |opts|
-      opts.banner = "Usage: magicmonkey #{ssr} [APP_NAME1 ... APP_NAME2 ...]"
-      opts.separator "If no application name passed, #{ssr} all applications."
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+  ################
+  # SHOW COMMAND #
+  ################
+  def self.show(args)
+    applications = help2('show', 'Shows the configurations of selected applications', args)
+    applications.each do |app|
+      puts app.upcase
+      pp Conf[app]
+      puts '-' * 80
     end
-    begin
-      args = parser.parse!(args)
-    rescue => e
-      rputs e
-      puts parser.help; exit
+  end
+
+  #################
+  # VHOST COMMAND #
+  #################
+  def self.vhost(args)
+    app = self.help('vhost', 'Creates the Apache virtual host file for an application.', args) do |opts|
+      opts.on('-s', '--server-name SERVER_NAME', 'The server name') do |s|
+        @o[:server_name] = s
+      end
+      opts.on('--path VHOST_PATH', "Use the given virtual host path (default: '#{@o[:vhost_path]}')") do |path|
+        @o[:vhost_path] = path
+      end
+      opts.on('-f', '--[no-]overwrite-file', "Replace exist file (default: #{@o[:overwrite_file]})") do |f|
+        @o[:overwrite_file] = f
+      end
+      opts.on('--[no-]enable-site', "Enable Apache virtual host (default: #{@o[:enable_site]})") do |e|
+        @o[:enable_site] = e
+      end
+      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default: #{@o[:reload_apache]})") do |r|
+        @o[:reload_apache] = r
+      end
     end
-    applications = args
-    applications = Conf.applications if applications.empty?
-    applications.each do |app_name|
-      o = Conf[app_name.to_sym]
-      if o
-        check_ruby_version!(o[:ruby])
-        server = check_app_server!(o[:app_server])
-        print "Calling #{bold}#{ssr}#{reset} for '#{app_name}' application..."
-        STDOUT.flush
-        begin
-          output = self.run(o){server.send(ssr, o)}
-          puts " #{green}#{bold}done#{reset}."
-        rescue Cocaine::ExitStatusError => e
-          puts ''
-          rputs "Failed to #{ssr} application '#{app_name}'"
-        end
-      else
-        rputs "Application '#{app_name}' is not added."
-        rputs "use 'magicmonkey add #{app_name}' to add this application."
+
+    app_conf = Conf[app.to_sym]
+    unless app_conf
+      rputs "Application '#{app}' does not configured."
+      puts  "Use 'magicmonkey configure #{app}' to configure it."
+      exit
+    end
+
+    @o[:vhost_template].gsub!('$SERVER_NAME', @o[:server_name] || app)
+    @o[:vhost_template].gsub!('$PORT', app_conf[:port].to_s)
+
+    vh_file = File.join(@o[:vhost_path], app)
+    if (!File.exist?(vh_file) || @o[:overwrite_file])
+      begin
+        Cocaine::CommandLine.new("sudo echo '#{@o[:vhost_template]}' > '#{vh_file}'").run
+      rescue Cocaine::ExitStatusError => e
+        rputs 'Failed to write virtual host file.'
+      end
+    else
+      rputs 'Failed to write virtual host file.'
+      puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
+    end
+    if @o[:enable_site]
+      begin
+        Cocaine::CommandLine.new("sudo a2ensite '#{app}'").run
+      rescue Cocaine::ExitStatusError => e
+        rputs 'Failed to enable the site.'
+      end
+    end
+    if @o[:enable_site] && @o[:reload_apache]
+      begin
+        Cocaine::CommandLine.new('sudo /etc/init.d/apache2 reload').run
+      rescue Cocaine::ExitStatusError => e
+        rputs 'Failed to reload Apache.'
       end
     end
   end
 
-  def self.show(args)
-    parser = OptionParser.new do |opts|
-      opts.banner = "Usage: magicmonkey show [APP_NAME1 ... APP_NAME2 ...]"
-      opts.separator 'If no application name passed, show the configuration of all applications.'
-      opts.separator ''
-      opts.separator 'Options:'
-      opts.on_tail('-v', '--version', 'Print version') { puts Magicmonkey::VERSION; exit }
-      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+  #################
+  # START COMMAND #
+  #################
+  def self.start(args)
+    applications = help2('start', 'Starts the selected applications.', args)
+    applications.each do |app|
+      app_conf = Conf[app.to_sym]
+      unless app_conf
+        rputs "Application '#{app}' does not configured."
+        puts  "Use 'magicmonkey configure #{app}' to configure it."
+        exit
+      end
+      check_ruby_version!(app_conf[:ruby])
+      server = check_app_server!(app_conf[:app_server])
+      lines = []
+      lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
+      lines << "rvm use #{app_conf[:ruby]}"
+      lines += server.start(app_conf)
+      command = "bash -c \"#{lines.join(' && ')}\""
+      if app_conf[:bundle_exec]
+        command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
+      end
+      begin
+        print "Calling #{bold}start#{reset} for '#{app}' application..."
+        Dir.chdir(app_conf[:app_path]) do
+          Cocaine::CommandLine.new(command).run
+        end
+        puts " #{green}#{bold}done#{reset}."
+      rescue Cocaine::ExitStatusError => e
+        rputs "Failed to start application '#{app}'"
+      end
     end
-    begin
-      args = parser.parse!(args)
-    rescue => e
-      rputs e
-      puts parser.help; exit
+  end
+
+  ################
+  # STOP COMMAND #
+  ################
+  def self.stop(args)
+    applications = help2('stop', 'Stops the selected applications.', args)
+    applications.each do |app|
+      app_conf = Conf[app.to_sym]
+      unless app_conf
+        rputs "Application '#{app}' does not configured."
+        puts  "Use 'magicmonkey configure #{app}' to configure it."
+        exit
+      end
+      check_ruby_version!(app_conf[:ruby])
+      server = check_app_server!(app_conf[:app_server])
+      lines = []
+      lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
+      lines << "rvm use #{app_conf[:ruby]}"
+      lines += server.stop(app_conf)
+      command = "bash -c \"#{lines.join(' && ')}\""
+      if app_conf[:bundle_exec]
+        command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
+      end
+      begin
+        print "Calling #{bold}stop#{reset} for '#{app}' application..."
+        Dir.chdir(app_conf[:app_path]) do
+          Cocaine::CommandLine.new(command).run
+        end
+        puts " #{green}#{bold}done#{reset}."
+      rescue Cocaine::ExitStatusError => e
+        rputs "Failed to stop application '#{app}'"
+      end
     end
-    applications = args
-    applications = Conf.applications if applications.empty?
-    applications.each do |app_name|
-      puts app_name.upcase
-      pp Conf[app_name]
-      puts '-'*80
+  end
+
+  ###################
+  # RESTART COMMAND #
+  ###################
+  def self.restart(args)
+    applications = help2('restart', 'Restart the selected applications.', args)
+    applications.each do |app|
+      app_conf = Conf[app.to_sym]
+      unless app_conf
+        rputs "Application '#{app}' does not configured."
+        puts  "Use 'magicmonkey configure #{app}' to configure it."
+        exit
+      end
+      check_ruby_version!(app_conf[:ruby])
+      server = check_app_server!(app_conf[:app_server])
+      lines = []
+      lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
+      lines << "rvm use #{app_conf[:ruby]}"
+      lines += server.stop(app_conf)
+      lines << 'sleep 3'
+      lines += server.start(app_conf)
+      command = "bash -c \"#{lines.join(' && ')}\""
+      if app_conf[:bundle_exec]
+        command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
+      end
+      begin
+        print "Calling #{bold}restart#{reset} for '#{app}' application..."
+        Dir.chdir(app_conf[:app_path]) do
+          Cocaine::CommandLine.new(command).run
+        end
+        puts " #{green}#{bold}done#{reset}."
+      rescue Cocaine::ExitStatusError => e
+        rputs "Failed to restart application '#{app}'"
+      end
     end
   end
 
   private
+
+  def self.check_port!(port)
+    if Conf.ports.include?(port)
+      rputs 'Invalid port number. This port is used by another application or is invalid.'
+      exit
+    end
+  end
 
   def self.check_ruby_version!(ruby)
     rubies = ['default', 'system']
@@ -296,11 +294,10 @@ module MagicMonkey
   def self.check_app_server!(app_server)
     unless app_server
       rputs 'You must specify the application server.'
-      rputs 'Please use --app-server option. e.g. magicmonkey add APP_NAME --app-server=passenger'
       exit
     end
     begin
-      Cocaine::CommandLine.new(app_server).run
+      Cocaine::CommandLine.new("#{app_server} -v").run
     rescue Cocaine::CommandNotFoundError
       rputs "The application server '#{app_server}' is not installed in your system."
       rputs 'Please use a valid and installed application server.'
@@ -309,27 +306,64 @@ module MagicMonkey
     end
     begin
       require "#{$APP_PATH}/lib/magicmonkey/app_servers/#{app_server}"
-      const_get(app_server.capitalize)
+      m = ''
+      i = 0
+      app_server.each_char do |c|
+        app_server[i-1] == '_' ? m << c.upcase : m << c if c != '_'
+        i+=1
+      end
+      m[0] = m[0].upcase
+      const_get(m)
     rescue LoadError, NameError
-      rputs "No module '#{app_server.capitalize}' found in #{$APP_PATH}/lib/magicmonkey/app_servers/#{app_server}.rb"
+      rputs "No module '#{m}' found in #{$APP_PATH}/lib/magicmonkey/app_servers/#{app_server}.rb"
       rputs "You must create a module called '#{app_server.capitalize}' to tell how to start, stop and restart the server."
       exit
     end
   end
 
-  def self.run(options)
-    lines = []
-    lines << "source #{Dir.home}/.rvm/scripts/rvm"
-    lines << "rvm use #{options[:ruby]}"
-    lines << "cd #{options[:app_path]}"
-    res = yield
-    if res.class == Array
-      lines += res
-    elsif res.class == String
-      lines << res
+  def self.help(command, desc, args)
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: magicmonkey #{command} APP_NAME"
+      opts.separator ''
+      if desc
+        opts.separator desc
+        opts.separator ''
+      end
+      opts.separator 'Options:'
+      yield(opts) if block_given?
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
     end
-    line = Cocaine::CommandLine.new("bash -c '#{lines.join(' && ')}'")
-    line.run
+    begin
+      args = parser.parse!(args)
+      raise 'Missing application name.' if args.size != 1
+    rescue => e
+      puts parser.help; exit
+    end
+    return args.first
+  end
+
+  def self.help2(command, desc, args)
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: magicmonkey #{command} [APP_NAME1 APP_NAME2 ...]"
+      opts.separator ''
+      if desc
+        opts.separator desc
+        opts.separator "If no application name passed, #{command} all applications."
+        opts.separator ''
+      end
+      opts.separator ''
+      opts.separator 'Options:'
+      yield(opts) if block_given?
+      opts.on_tail('-h', '--help', 'Show this help message') { puts opts; exit }
+    end
+    begin
+      args = parser.parse!(args)
+    rescue => e
+      puts parser.help; exit
+    end
+    applications = Conf.applications
+    applications &= args.map(&:to_sym) unless args.empty?
+    return applications
   end
 
   def self.rputs(message)

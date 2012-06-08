@@ -16,17 +16,16 @@ EOT
   DEFAULT = {
     :app_server => nil,
     :app_server_options => nil,
-    :port => nil,
     :ruby => 'default',
-    :app_path => '/var/sites/$APP_NAME/current',
-    :server_name => '$APP_NAME.local',
+    :app_path => '/var/sites/$APP/current',
+    :bundle_exec => true,
     :vhost_template => VHT,
     :vhost_path => '/etc/apache2/sites-available',
-    :overwrite_files => false,
-    :create_vhost => true,
+    :overwrite_file => false,
     :enable_site => false,
     :reload_apache => false,
-    :bundle_exec => true
+    :editor => 'nano',
+    :verbose => false
   }
 
   def initialize

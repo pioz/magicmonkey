@@ -1,8 +1,7 @@
 = Magicmonkey
 
-Magicmonkey is a useful script that can manage your Ruby on Rails applications.
-Magicmonkey allows you to build in easy way the follow web server architecture:
-
+Magicmonkey is a useful script that can help you to manage your Ruby on Rails applications.
+Magicmonkey allows to build in easy way the follow web server architecture:
 
     +---------------------------------------------------------------------------------------------------+
     | Apache web server                                                                                 |
@@ -29,7 +28,7 @@ Every your web applications have a virtual host like this:
       ProxyPassReverse / http://127.0.0.1:3000/
     </VirtualHost>
 
-A proxy that speak with an application server standalone mode (like Phusion Passenger v3) that run with a specific Ruby version.
+A proxy that speak with an application server in standalone mode (like Phusion Passenger v3) that run with a specific Ruby version.
 To do this you need to have install RVM to manage multiply Ruby versions.
 
 == Install
@@ -38,15 +37,15 @@ To do this you need to have install RVM to manage multiply Ruby versions.
 
 == Usage
 
-First of all you need to say to Magicmonkey that you want manage an application in this way. To to this use the magicmonkey command 'ADD':
+First of all you need to configure an application. To to this use the magicmonkey command 'configure':
 
-    magicmonkey add APP_NAME [options]
+    magicmonkey configure APP_NAME [options]
 
-When added, you can start, stop, restart the application
+When configured, you can start, stop, restart the application
 
     magicmonkey {start|stop|restart} APP_NAME1, APP_NAME2, ...
 
-If no application is given start, stop, restart all application.
+If no application is given start, stop, restart all applications.
 
 You can show the configuration of all your applications with
 
