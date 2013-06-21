@@ -11,10 +11,8 @@ class Conf
     :ruby => 'default',
     :app_path => '/var/sites/$APP/current',
     :bundle_exec => true,
-    :overwrite_file => false,
-    :editor => 'nano',
     :enabled => true,
-    :verbose => false
+    :editor => 'nano',
   }
 
   def initialize

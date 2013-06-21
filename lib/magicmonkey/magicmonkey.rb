@@ -114,7 +114,12 @@ module Magicmonkey
   # SHOW COMMAND #
   ################
   def self.show(args)
-    applications = help2('show', 'Shows the configurations of selected applications', args)
+    applications = help2('show', 'Shows the configurations of selected applications', args) do |opts|
+      opts.on('-e', '--enabled', 'Show enabled applications.') do |s|
+        @o[:enabled] = s
+      end
+    end
+    applications.select!{|k| Conf[k.to_sym][:enabled]} if @o[:enabled]
     applications.each do |app|
       puts app.upcase
       pp Conf[app]
