@@ -53,7 +53,7 @@ module Magicmonkey
 
     app_conf = Conf[app.to_sym]
     unless app_conf
-      app_conf = @o.select{|k,v| [:app_server, :app_server_options, :ruby, :app_path, :bundle_exec].include?(k)}
+      app_conf = @o.select{|k,v| ![:editor].include?(k)}
       app_conf[:app_path].gsub!('$APP', app)
       app_conf[:port] = Conf.next_port
     end
@@ -115,6 +115,7 @@ module Magicmonkey
   ################
   def self.show(args)
     applications = help2('show', 'Shows the configurations of selected applications', args) do |opts|
+      @o[:enabled] = false
       opts.on('-e', '--enabled', 'Show enabled applications.') do |s|
         @o[:enabled] = s
       end
