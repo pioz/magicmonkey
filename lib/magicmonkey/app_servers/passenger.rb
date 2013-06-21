@@ -5,7 +5,7 @@ module Passenger
   end
 
   def self.stop(args = {})
-    ["passenger stop -p #{args[:port]}"]
+    ["passenger stop -p #{args[:port]} || true"]
   end
 
 end

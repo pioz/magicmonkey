@@ -5,7 +5,7 @@ module Thin
   end
 
   def self.stop(args = {})
-    ["thin stop -p #{args[:port]}"]
+    ["thin stop -p #{args[:port]} || true"]
   end
 
 end

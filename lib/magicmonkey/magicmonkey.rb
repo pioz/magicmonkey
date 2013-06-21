@@ -11,7 +11,7 @@ module Magicmonkey
 
   @o = {}
 
-  COMMANDS = %w(configure deconfigure show vhost start stop restart)
+  COMMANDS = %w(configure deconfigure enable disable show vhost start stop restart)
 
   def self.main
     #Process::UID.change_privilege(Conf[:uid] || Process.uid)
@@ -88,6 +88,28 @@ module Magicmonkey
     end
   end
 
+  ##################
+  # ENABLE COMMAND #
+  ##################
+  def self.enable(args)
+    applications = help2('enable', 'Enable the selected applications', args)
+    applications.each do |app|
+      Conf[app][:enabled] = true
+    end
+    Conf.save
+  end
+
+  ###################
+  # DISABLE COMMAND #
+  ###################
+  def self.disable(args)
+    applications = help2('disable', 'Disable the selected applications', args)
+    applications.each do |app|
+      Conf[app][:enabled] = false
+    end
+    Conf.save
+  end
+
   ################
   # SHOW COMMAND #
   ################
@@ -101,138 +123,31 @@ module Magicmonkey
   end
 
   #################
-  # VHOST COMMAND #
-  #################
-  def self.vhost(args)
-    app = self.help('vhost', 'Creates the Apache virtual host file for an application.', args) do |opts|
-      opts.on('-s', '--server-name SERVER_NAME', 'The server name') do |s|
-        @o[:server_name] = s
-      end
-      opts.on('--path VHOST_PATH', "Use the given virtual host path (default: '#{@o[:vhost_path]}')") do |path|
-        @o[:vhost_path] = path
-      end
-      opts.on('-f', '--[no-]overwrite-file', "Replace exist file (default: #{@o[:overwrite_file]})") do |f|
-        @o[:overwrite_file] = f
-      end
-      opts.on('--[no-]enable-site', "Enable Apache virtual host (default: #{@o[:enable_site]})") do |e|
-        @o[:enable_site] = e
-      end
-      opts.on('--[no-]reload-apache', "Reload apache to load virtual host (default: #{@o[:reload_apache]})") do |r|
-        @o[:reload_apache] = r
-      end
-    end
-
-    app_conf = Conf[app.to_sym]
-    unless app_conf
-      rputs "Application '#{app}' does not configured."
-      puts  "Use 'magicmonkey configure #{app}' to configure it."
-      exit
-    end
-
-    @o[:vhost_template].gsub!('$SERVER_NAME', @o[:server_name] || app)
-    @o[:vhost_template].gsub!('$PORT', app_conf[:port].to_s)
-
-    vh_file = File.join(@o[:vhost_path], app)
-    if (!File.exist?(vh_file) || @o[:overwrite_file])
-      begin
-        Cocaine::CommandLine.new("sudo echo '#{@o[:vhost_template]}' > '#{vh_file}'").run
-      rescue Cocaine::ExitStatusError => e
-        rputs 'Failed to write virtual host file.'
-      end
-    else
-      rputs 'Failed to write virtual host file.'
-      puts "Virtual host file '#{vh_file}' already exist. Use option '-f' to replace it."
-    end
-    if @o[:enable_site]
-      begin
-        Cocaine::CommandLine.new("sudo a2ensite '#{app}'").run
-      rescue Cocaine::ExitStatusError => e
-        rputs 'Failed to enable the site.'
-      end
-    end
-    if @o[:enable_site] && @o[:reload_apache]
-      begin
-        Cocaine::CommandLine.new('sudo /etc/init.d/apache2 reload').run
-      rescue Cocaine::ExitStatusError => e
-        rputs 'Failed to reload Apache.'
-      end
-    end
-  end
-
-  #################
   # START COMMAND #
   #################
   def self.start(args)
-    applications = help2('start', 'Starts the selected applications.', args)
-    applications.each do |app|
-      app_conf = Conf[app.to_sym]
-      unless app_conf
-        rputs "Application '#{app}' does not configured."
-        puts  "Use 'magicmonkey configure #{app}' to configure it."
-        exit
-      end
-      check_ruby_version!(app_conf[:ruby])
-      server = check_app_server!(app_conf[:app_server])
-      lines = []
-      lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
-      lines << "rvm use #{app_conf[:ruby]}"
-      lines += server.start(app_conf)
-      command = "bash -c \"#{lines.join(' && ')}\""
-      if app_conf[:bundle_exec]
-        command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
-      end
-      begin
-        print "Calling #{bold}start#{reset} for '#{app}' application..."
-        Dir.chdir(app_conf[:app_path]) do
-          Cocaine::CommandLine.new(command).run
-        end
-        puts " #{green}#{bold}done#{reset}."
-      rescue Cocaine::ExitStatusError => e
-        rputs "Failed to start application '#{app}'"
-      end
-    end
+    self.run('start', args)
   end
 
   ################
   # STOP COMMAND #
   ################
   def self.stop(args)
-    applications = help2('stop', 'Stops the selected applications.', args)
-    applications.each do |app|
-      app_conf = Conf[app.to_sym]
-      unless app_conf
-        rputs "Application '#{app}' does not configured."
-        puts  "Use 'magicmonkey configure #{app}' to configure it."
-        exit
-      end
-      check_ruby_version!(app_conf[:ruby])
-      server = check_app_server!(app_conf[:app_server])
-      lines = []
-      lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
-      lines << "rvm use #{app_conf[:ruby]}"
-      lines += server.stop(app_conf)
-      command = "bash -c \"#{lines.join(' && ')}\""
-      if app_conf[:bundle_exec]
-        command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
-      end
-      begin
-        print "Calling #{bold}stop#{reset} for '#{app}' application..."
-        Dir.chdir(app_conf[:app_path]) do
-          Cocaine::CommandLine.new(command).run
-        end
-        puts " #{green}#{bold}done#{reset}."
-      rescue Cocaine::ExitStatusError => e
-        rputs "Failed to stop application '#{app}'"
-      end
-    end
+    self.run('stop', args)
   end
 
   ###################
   # RESTART COMMAND #
   ###################
   def self.restart(args)
-    applications = help2('restart', 'Restart the selected applications.', args)
-    applications.each do |app|
+    self.run('restart', args)
+  end
+
+  private
+
+  def self.run(action, args)
+    applications = help2(action, "#{action.capitalize} the selected applications.", args)
+    applications.select{|k| Conf[k.to_sym][:enabled]}.each do |app|
       app_conf = Conf[app.to_sym]
       unless app_conf
         rputs "Application '#{app}' does not configured."
@@ -241,29 +156,37 @@ module Magicmonkey
       end
       check_ruby_version!(app_conf[:ruby])
       server = check_app_server!(app_conf[:app_server])
-      lines = []
-      lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
-      lines << "rvm use #{app_conf[:ruby]}"
-      lines += server.stop(app_conf)
-      lines << 'sleep 3'
-      lines += server.start(app_conf)
-      command = "bash -c \"#{lines.join(' && ')}\""
-      if app_conf[:bundle_exec]
-        command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
+      command = self.build_command(app) do
+        if action == 'restart'
+          [server.stop(app_conf), 'sleep 3', server.start(app_conf)]
+        else
+          server.send(action, app_conf)
+        end
       end
       begin
-        print "Calling #{bold}restart#{reset} for '#{app}' application..."
+        print "Calling #{bold}#{action}#{reset} for '#{app}' application..."
         Dir.chdir(app_conf[:app_path]) do
           Cocaine::CommandLine.new(command).run
         end
         puts " #{green}#{bold}done#{reset}."
       rescue Cocaine::ExitStatusError => e
-        rputs "Failed to restart application '#{app}'"
+        rputs "Failed to #{action} application '#{app}'"
       end
     end
   end
 
-  private
+  def self.build_command(app)
+    app_conf = Conf[app.to_sym]
+    lines = []
+    lines << "source '#{Dir.home}/.rvm/scripts/rvm'"
+    lines << "rvm use #{app_conf[:ruby]}"
+    lines += yield if block_given?
+    command = "bash -c \"#{lines.join(' && ')}\""
+    if app_conf[:bundle_exec]
+      command.gsub!(" && #{app_conf[:app_server]} ", " && bundle exec #{app_conf[:app_server]} ")
+    end
+    return command
+  end
 
   def self.check_port!(port)
     if Conf.ports.include?(port)

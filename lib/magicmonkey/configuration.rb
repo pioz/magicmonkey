@@ -5,26 +5,15 @@ class Conf
   include Singleton
   attr_reader :config
 
-  VHT = <<EOT
-<VirtualHost *:80>
-  ServerName $SERVER_NAME
-  ProxyPass / http://127.0.0.1:$PORT/
-  ProxyPassReverse / http://127.0.0.1:$PORT/
-</VirtualHost>
-EOT
-
   DEFAULT = {
     :app_server => nil,
     :app_server_options => nil,
     :ruby => 'default',
     :app_path => '/var/sites/$APP/current',
     :bundle_exec => true,
-    :vhost_template => VHT,
-    :vhost_path => '/etc/apache2/sites-available',
     :overwrite_file => false,
-    :enable_site => false,
-    :reload_apache => false,
     :editor => 'nano',
+    :enabled => true,
     :verbose => false
   }
 
@@ -64,7 +53,7 @@ EOT
   end
 
   def self.applications
-    Conf.instance.config.keys.select{|k| ![:default, :uid].include?(k)}
+    apps = Conf.instance.config.keys.select{|k| ![:default, :uid].include?(k)}
   end
 
   def self.ports
