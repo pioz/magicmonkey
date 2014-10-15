@@ -5,7 +5,8 @@ module UnicornRails
   end
 
   def self.stop(args = {})
-    ["kill `ps ax | grep -v grep | grep -e 'unicorn_rails .*-p #{args[:port]}' | awk 'NR==1{print $1}'` || true"]
+    ## QUIT - graceful shutdown, waits for workers to finish their current request before finishing. from http://unicorn.bogomips.org/SIGNALS.html
+    ["kill -QUIT `ps ax | grep -v grep | grep -e '[u]nicorn_rails master .*-p #{args[:port]}' | awk 'NR==1{print $1}'` || true"]
   end
 
 end
